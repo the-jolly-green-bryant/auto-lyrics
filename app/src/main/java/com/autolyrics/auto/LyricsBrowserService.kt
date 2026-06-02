@@ -255,6 +255,15 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         val subtitle = buildString {
             append(track.artist)
+            val posMs = try {
+                mediaTracker.getCurrentPositionMs().coerceAtLeast(0)
+            } catch (_: Exception) { -1L }
+            if (posMs >= 0 && track.durationMs > 0) {
+                append("  ·  ")
+                append(formatTime(posMs))
+                append(" / ")
+                append(formatTime(track.durationMs))
+            }
             val typeLabel = lyricsTypeLabel(state)
             if (typeLabel.isNotBlank()) {
                 append("  ·  ")

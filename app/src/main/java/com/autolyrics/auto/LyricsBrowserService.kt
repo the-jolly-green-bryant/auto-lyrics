@@ -179,6 +179,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             LyricsStatus.FOUND -> {
                 addTrackHeader(state, items)
                 buildWindowedLyrics(state, items)
+                items.add(buildBrowsableItem(SYNC_MENU_ID, "⟳ Sync", "Adjust offset"))
             }
             LyricsStatus.PLAIN_ONLY -> {
                 addTrackHeader(state, items)
@@ -206,6 +207,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                         items.add(buildTextItem("line_$i", "    $text", pad = true, subtitle = trans))
                     }
                 }
+                items.add(buildBrowsableItem(SYNC_MENU_ID, "⟳ Sync", "Adjust offset"))
             }
         }
 
@@ -272,7 +274,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
 
         val descBuilder = MediaDescriptionCompat.Builder()
-            .setMediaId(SYNC_MENU_ID)
+            .setMediaId("header")
             .setTitle(track.title)
             .setSubtitle(subtitle)
 
@@ -284,7 +286,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         items.add(
             MediaBrowserCompat.MediaItem(
                 descBuilder.build(),
-                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+                MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
             )
         )
     }
@@ -339,6 +341,17 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         return MediaBrowserCompat.MediaItem(
             builder.build(),
             MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+        )
+    }
+
+    private fun buildBrowsableItem(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
+        return MediaBrowserCompat.MediaItem(
+            MediaDescriptionCompat.Builder()
+                .setMediaId(id)
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .build(),
+            MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
         )
     }
 

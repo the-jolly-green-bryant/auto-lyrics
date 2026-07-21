@@ -13,6 +13,7 @@ local.properties
 *.apk
 *.aab
 app/debug.keystore
+app/signing.p12
 app/key.pem
 app/cert.pem
 .env

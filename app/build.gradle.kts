@@ -17,10 +17,23 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            storeFile = file("signing.p12")
-            storePassword = "REMOVED"
-            keyAlias = "autolyrics"
-            keyPassword = "REMOVED"
+            val signingStoreFile = providers.gradleProperty("signing.store.file").orNull
+            val signingStorePassword = providers.gradleProperty("signing.store.password").orNull
+            val signingKeyAlias = providers.gradleProperty("signing.key.alias").orNull
+            val signingKeyPassword = providers.gradleProperty("signing.key.password").orNull
+
+            if (listOf(
+                    signingStoreFile,
+                    signingStorePassword,
+                    signingKeyAlias,
+                    signingKeyPassword
+                ).all { !it.isNullOrBlank() }
+            ) {
+                storeFile = rootProject.file(signingStoreFile!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
         }
     }
 

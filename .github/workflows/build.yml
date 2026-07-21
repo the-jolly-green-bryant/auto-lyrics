@@ -48,7 +48,33 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "artifact_name=auto-lyrics-$version" >> "$GITHUB_OUTPUT"
 
+      - name: Restore APK signing key
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+        run: |
+          if [[ -z "$SIGNING_KEY_BASE64" ]]; then
+            echo "ANDROID_SIGNING_KEY_BASE64 is not configured" >&2
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+
       - name: Build signed debug APK
+        if: github.event_name != 'pull_request'
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon clean assembleDebug \
+            -Psigning.store.file="$RUNNER_TEMP/signing.p12" \
+            -Psigning.store.password="$SIGNING_STORE_PASSWORD" \
+            -Psigning.key.alias="$SIGNING_KEY_ALIAS" \
+            -Psigning.key.password="$SIGNING_KEY_PASSWORD"
+
+      - name: Build pull request APK
+        if: github.event_name == 'pull_request'
         run: ./gradlew --no-daemon clean assembleDebug
 
       - name: Prepare release files

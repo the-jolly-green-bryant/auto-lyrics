@@ -24,6 +24,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.security.MessageDigest
 
 class MediaTracker private constructor(context: Context) {
 
@@ -49,7 +50,6 @@ class MediaTracker private constructor(context: Context) {
     private var lyricsOffsetMs: Long = 0L
 
     init {
-        lyricsOffsetMs = prefs.getLong("lyrics_offset_ms", 0L)
         _state.value = _state.value.copy(offsetMs = lyricsOffsetMs)
     }
 
@@ -66,9 +66,10 @@ class MediaTracker private constructor(context: Context) {
         val track = pendingTrack ?: return@Runnable
         val art = pendingArt
         val current = _state.value.track
-        if (track.title == current?.title && track.artist == current.artist) return@Runnable
+        if (sameTrack(track, current)) return@Runnable
 
         translationJob?.cancel()
+        lyricsOffsetMs = savedOffsetFor(track)
         _state.value = _state.value.copy(
             track = track,
             lines = emptyList(),
@@ -79,7 +80,8 @@ class MediaTracker private constructor(context: Context) {
             albumArt = art,
             albumColors = null,
             translatedLines = null,
-            detectedLanguage = null
+            detectedLanguage = null,
+            offsetMs = lyricsOffsetMs
         )
         fetchLyrics(track)
         extractAlbumColors(art)
@@ -101,16 +103,29 @@ class MediaTracker private constructor(context: Context) {
 
     fun adjustOffset(deltaMs: Long) {
         lyricsOffsetMs += deltaMs
-        prefs.edit().putLong("lyrics_offset_ms", lyricsOffsetMs).apply()
+        saveOffsetForCurrentTrack()
         _state.value = _state.value.copy(offsetMs = lyricsOffsetMs)
         updateCurrentPosition()
     }
 
     fun resetOffset() {
         lyricsOffsetMs = 0L
-        prefs.edit().putLong("lyrics_offset_ms", 0L).apply()
+        saveOffsetForCurrentTrack()
         _state.value = _state.value.copy(offsetMs = lyricsOffsetMs)
         updateCurrentPosition()
+    }
+
+    fun retryCurrentLyrics() {
+        val track = _state.value.track ?: return
+        lyricsCache.remove(track.title, track.artist, track.spotifyUri)
+        _state.value = _state.value.copy(
+            status = LyricsStatus.LOADING,
+            source = "",
+            lines = emptyList(),
+            currentIndex = -1,
+            currentWordIndex = -1
+        )
+        fetchLyrics(track)
     }
 
     fun resumePlayback() {
@@ -119,7 +134,7 @@ class MediaTracker private constructor(context: Context) {
 
     fun setOffset(ms: Long) {
         lyricsOffsetMs = ms
-        prefs.edit().putLong("lyrics_offset_ms", lyricsOffsetMs).apply()
+        saveOffsetForCurrentTrack()
         _state.value = _state.value.copy(offsetMs = lyricsOffsetMs)
         updateCurrentPosition()
     }
@@ -132,6 +147,95 @@ class MediaTracker private constructor(context: Context) {
             lastPositionMs + (elapsed * playbackSpeed).toLong()
         }
         return basePos + lyricsOffsetMs
+    }
+
+    /**
+     * Accepts low-frequency state snapshots from Spotify App Remote. The regular
+     * position checker extrapolates between snapshots, so Spotify is never polled
+     * at karaoke refresh frequency.
+     */
+    fun onSpotifyPlayerState(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        spotifyUri: String,
+        positionMs: Long,
+        isPaused: Boolean
+    ) {
+        val track = TrackInfo(
+            MetadataCleaner.cleanTitle(title),
+            MetadataCleaner.cleanArtist(artist),
+            MetadataCleaner.cleanAlbum(album),
+            durationMs,
+            spotifyUri
+        )
+        val current = _state.value.track
+        if (!sameTrack(track, current)) {
+            pendingTrack = track
+            pendingArt = _state.value.albumArt
+            handler.removeCallbacks(trackChangeRunnable)
+            handler.post(trackChangeRunnable)
+        }
+
+        lastPositionMs = positionMs
+        lastPositionUpdateTime = SystemClock.elapsedRealtime()
+        playbackSpeed = 1.0f
+        _state.value = _state.value.copy(isPlaying = !isPaused)
+        handler.removeCallbacks(positionChecker)
+        if (!isPaused) handler.post(positionChecker)
+    }
+
+    private fun sameTrack(first: TrackInfo?, second: TrackInfo?): Boolean {
+        if (first == null || second == null) return false
+        if (!first.spotifyUri.isNullOrBlank() || !second.spotifyUri.isNullOrBlank()) {
+            return !first.spotifyUri.isNullOrBlank() &&
+                !second.spotifyUri.isNullOrBlank() &&
+                first.spotifyUri == second.spotifyUri
+        }
+        return first.title.equals(second.title, ignoreCase = true) &&
+            first.artist.equals(second.artist, ignoreCase = true) &&
+            first.album.equals(second.album, ignoreCase = true) &&
+            durationsMatch(first.durationMs, second.durationMs)
+    }
+
+    private fun durationsMatch(first: Long, second: Long): Boolean {
+        if (first <= 0L || second <= 0L) return true
+        return kotlin.math.abs(first - second) < 2_000L
+    }
+
+    private fun savedOffsetFor(track: TrackInfo): Long {
+        val spotifyKey = track.spotifyUri?.takeIf { it.isNotBlank() }?.let(::hashedOffsetKey)
+        return if (spotifyKey != null && prefs.contains(spotifyKey)) {
+            prefs.getLong(spotifyKey, 0L)
+        } else {
+            prefs.getLong(metadataOffsetKey(track), 0L)
+        }
+    }
+
+    private fun saveOffsetForCurrentTrack() {
+        val track = _state.value.track ?: return
+        val editor = prefs.edit().putLong(metadataOffsetKey(track), lyricsOffsetMs)
+        track.spotifyUri?.takeIf { it.isNotBlank() }?.let {
+            editor.putLong(hashedOffsetKey(it), lyricsOffsetMs)
+        }
+        editor.apply()
+    }
+
+    private fun metadataOffsetKey(track: TrackInfo): String = hashedOffsetKey(
+        listOf(
+            track.title.lowercase().trim(),
+            track.artist.lowercase().trim(),
+            track.album.lowercase().trim(),
+            track.durationMs.toString()
+        ).joinToString("|")
+    )
+
+    private fun hashedOffsetKey(identity: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return "lyrics_offset_$digest"
     }
 
     private fun updateCurrentPosition() {
@@ -180,7 +284,8 @@ class MediaTracker private constructor(context: Context) {
             handler.removeCallbacks(positionChecker)
             handler.removeCallbacks(trackChangeRunnable)
             artJob?.cancel()
-            _state.value = LyricsState(offsetMs = lyricsOffsetMs)
+            lyricsOffsetMs = 0L
+            _state.value = LyricsState(offsetMs = 0L)
             return
         }
 
@@ -211,7 +316,7 @@ class MediaTracker private constructor(context: Context) {
         val newTrack = TrackInfo(title, artist, album, duration)
         val current = _state.value.track
 
-        if (current != null && newTrack.title == current.title && newTrack.artist == current.artist) {
+        if (sameTrack(newTrack, current)) {
             if (art != null && _state.value.albumArt == null) {
                 _state.value = _state.value.copy(albumArt = art)
                 extractAlbumColors(art)
@@ -259,7 +364,7 @@ class MediaTracker private constructor(context: Context) {
         fetchJob?.cancel()
         fetchJob = scope.launch(Dispatchers.IO) {
             try {
-                val cached = lyricsCache.get(track.title, track.artist)
+                val cached = lyricsCache.get(track.title, track.artist, track.spotifyUri)
                 if (cached != null) {
                     val (lines, status, source) = cached
                     withContext(Dispatchers.Main) {
@@ -277,20 +382,24 @@ class MediaTracker private constructor(context: Context) {
                         translateIfNeeded(lines, track)
                     }
 
-                    val cacheAge = lyricsCache.getAge(track.title, track.artist)
-                    if (cacheAge < CACHE_REFRESH_MS) {
-                        prefetchNextSong()
-                        return@launch
-                    }
+                    prefetchNextSong()
+                    return@launch
                 }
 
-                val result = fetchFromSyncLrc(track) ?: fetchFromLrcLib(track)
+                val result = fetchBestLyricsWithRetry(track)
 
                 withContext(Dispatchers.Main) {
                     if (_state.value.track != track) return@withContext
 
                     if (result != null) {
-                        lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
+                        lyricsCache.put(
+                            track.title,
+                            track.artist,
+                            result.lines,
+                            result.status,
+                            result.source,
+                            track.spotifyUri
+                        )
                         _state.value = _state.value.copy(
                             lines = result.lines,
                             currentIndex = -1,
@@ -302,7 +411,8 @@ class MediaTracker private constructor(context: Context) {
                             updateCurrentPosition()
                         }
                         translateIfNeeded(result.lines, track)
-                    } else if (cached == null) {
+                    } else {
+                        lyricsCache.putMissing(track.title, track.artist, track.spotifyUri)
                         _state.value = _state.value.copy(
                             status = LyricsStatus.NOT_FOUND,
                             source = ""
@@ -353,7 +463,7 @@ class MediaTracker private constructor(context: Context) {
                     if (lyricsCache.get(title, artist) != null) return@launch
 
                     val nextTrack = TrackInfo(title, artist, "", 0)
-                    val result = fetchFromSyncLrc(nextTrack) ?: fetchFromLrcLib(nextTrack)
+                    val result = fetchBestLyricsWithRetry(nextTrack)
                     if (result != null) {
                         lyricsCache.put(title, artist, result.lines, result.status, result.source)
                     }
@@ -370,6 +480,28 @@ class MediaTracker private constructor(context: Context) {
         val status: LyricsStatus,
         val source: String
     )
+
+    private fun fetchBestLyrics(track: TrackInfo): FetchResult? {
+        val syncLrc = fetchFromSyncLrc(track)
+        // Karaoke and line-synced lyrics are already the best useful outcome.
+        if (syncLrc?.status == LyricsStatus.FOUND) return syncLrc
+
+        // A later provider's synced result beats an earlier provider's plain text.
+        val lrcLib = fetchFromLrcLib(track)
+        if (lrcLib?.status == LyricsStatus.FOUND) return lrcLib
+        return syncLrc ?: lrcLib
+    }
+
+    private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
+        repeat(LYRICS_FETCH_ATTEMPTS) { attempt ->
+            val result = fetchBestLyrics(track)
+            if (result != null) return result
+            if (attempt < LYRICS_FETCH_ATTEMPTS - 1) {
+                delay(LYRICS_RETRY_DELAYS_MS[attempt])
+            }
+        }
+        return null
+    }
 
     private fun fetchFromSyncLrc(track: TrackInfo): FetchResult? {
         val result = try {
@@ -418,14 +550,28 @@ class MediaTracker private constructor(context: Context) {
         if (result.syncedLyrics != null) {
             val lines = LrcParser.parse(result.syncedLyrics)
             val hasRealText = lines.any { it.text != "♪" && it.text.isNotBlank() }
-            if (hasRealText) return FetchResult(lines, LyricsStatus.FOUND, "LRCLIB · Synced")
+            if (hasRealText) {
+                val source = if (result.matchedAlternateArtist) {
+                    "LRCLIB · Synced · Alternate recording"
+                } else {
+                    "LRCLIB · Synced"
+                }
+                return FetchResult(lines, LyricsStatus.FOUND, source)
+            }
         }
 
         if (result.plainLyrics != null) {
             val lines = result.plainLyrics.lines()
                 .filter { it.isNotBlank() }
                 .map { text -> LyricLine(0L, text) }
-            if (lines.isNotEmpty()) return FetchResult(lines, LyricsStatus.PLAIN_ONLY, "LRCLIB · Plain")
+            if (lines.isNotEmpty()) {
+                val source = if (result.matchedAlternateArtist) {
+                    "LRCLIB · Plain · Alternate recording"
+                } else {
+                    "LRCLIB · Plain"
+                }
+                return FetchResult(lines, LyricsStatus.PLAIN_ONLY, source)
+            }
         }
 
         return null
@@ -450,7 +596,8 @@ class MediaTracker private constructor(context: Context) {
     }
 
     companion object {
-        private const val CACHE_REFRESH_MS = 7L * 24 * 60 * 60 * 1000
+        private const val LYRICS_FETCH_ATTEMPTS = 3
+        private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L, 2_000L)
 
         @Volatile
         private var instance: MediaTracker? = null

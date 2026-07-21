@@ -35,9 +35,14 @@ class LyricsCache(context: Context) {
         val text: String
     )
 
-    fun get(title: String, artist: String): Triple<List<LyricLine>, LyricsStatus, String>? {
-        val file = cacheFile(title, artist)
-        if (!file.exists()) return null
+    fun get(title: String, artist: String, spotifyUri: String? = null): Triple<List<LyricLine>, LyricsStatus, String>? {
+        val spotifyFile = cacheFile(title, artist, spotifyUri)
+        val metadataFile = cacheFile(title, artist, null)
+        val file = when {
+            spotifyFile.exists() -> spotifyFile
+            metadataFile.exists() -> metadataFile
+            else -> return null
+        }
 
         return try {
             val json = file.readText()
@@ -45,6 +50,12 @@ class LyricsCache(context: Context) {
             val status = try {
                 LyricsStatus.valueOf(cached.status)
             } catch (_: Exception) {
+                return null
+            }
+            if (status == LyricsStatus.NOT_FOUND &&
+                System.currentTimeMillis() - cached.timestamp >= NEGATIVE_CACHE_MS
+            ) {
+                file.delete()
                 return null
             }
             val lines = cached.lines.map { cl ->
@@ -61,7 +72,14 @@ class LyricsCache(context: Context) {
         }
     }
 
-    fun put(title: String, artist: String, lines: List<LyricLine>, status: LyricsStatus, source: String) {
+    fun put(
+        title: String,
+        artist: String,
+        lines: List<LyricLine>,
+        status: LyricsStatus,
+        source: String,
+        spotifyUri: String? = null
+    ) {
         try {
             val cached = CachedResult(
                 lines = lines.map { line ->
@@ -75,28 +93,35 @@ class LyricsCache(context: Context) {
                 source = source,
                 timestamp = System.currentTimeMillis()
             )
-            val file = cacheFile(title, artist)
-            file.writeText(gson.toJson(cached))
+            val json = gson.toJson(cached)
+            cacheFile(title, artist, spotifyUri).writeText(json)
+            if (!spotifyUri.isNullOrBlank()) {
+                // Also index by metadata so the same cached lyrics work when the
+                // Spotify connection is unavailable.
+                cacheFile(title, artist, null).writeText(json)
+            }
         } catch (_: Exception) {
             // cache write failures are non-fatal
         }
     }
 
-    fun getAge(title: String, artist: String): Long {
-        val file = cacheFile(title, artist)
-        if (!file.exists()) return Long.MAX_VALUE
-        return try {
-            val json = file.readText()
-            val cached = gson.fromJson(json, CachedResult::class.java)
-            System.currentTimeMillis() - cached.timestamp
-        } catch (_: Exception) {
-            Long.MAX_VALUE
-        }
+    fun putMissing(title: String, artist: String, spotifyUri: String? = null) {
+        put(title, artist, emptyList(), LyricsStatus.NOT_FOUND, "", spotifyUri)
     }
 
-    private fun cacheFile(title: String, artist: String): File {
-        val key = "${title.lowercase().trim()}|${artist.lowercase().trim()}"
+    fun remove(title: String, artist: String, spotifyUri: String? = null) {
+        cacheFile(title, artist, spotifyUri).delete()
+        cacheFile(title, artist, null).delete()
+    }
+
+    private fun cacheFile(title: String, artist: String, spotifyUri: String?): File {
+        val key = spotifyUri?.takeIf { it.isNotBlank() }
+            ?: "${title.lowercase().trim()}|${artist.lowercase().trim()}"
         val hash = key.hashCode().toUInt().toString(16)
         return File(cacheDir, "$hash.json")
+    }
+
+    companion object {
+        private const val NEGATIVE_CACHE_MS = 24L * 60 * 60 * 1000
     }
 }

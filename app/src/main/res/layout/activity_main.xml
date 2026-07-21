@@ -59,6 +59,45 @@
         android:textAllCaps="false"
         android:visibility="gone" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp">
+
+        <Button
+            android:id="@+id/btn_spotify"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect Spotify"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#1DB954" />
+
+        <TextView
+            android:id="@+id/tv_spotify_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:text="Spotify not connected"
+            android:textColor="#AAAACC"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btn_retry_lyrics"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="4dp"
+        android:text="Retry lyrics"
+        android:textAllCaps="false"
+        android:visibility="gone" />
+
     <!-- Track Info + Album Art + Source -->
     <LinearLayout
         android:layout_width="match_parent"

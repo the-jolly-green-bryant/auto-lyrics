@@ -46,9 +46,22 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    val spotifyClientId = providers.gradleProperty("spotify.client.id")
+        .orElse(providers.systemProperty("spotify.client.id"))
+        .orElse("")
+    defaultConfig {
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${spotifyClientId.get()}\"")
+        buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"https://com.autolyrics/callback\"")
+    }
 }
 
 dependencies {
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")

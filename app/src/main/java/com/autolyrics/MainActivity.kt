@@ -35,6 +35,7 @@ import com.autolyrics.media.MediaTracker
 import com.autolyrics.model.AlbumColors
 import com.autolyrics.model.LyricsState
 import com.autolyrics.model.LyricsStatus
+import com.autolyrics.spotify.SpotifyRemoteManager
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -62,6 +63,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvAaDelay: TextView
     private lateinit var btnJumpToCurrent: Button
     private lateinit var prefs: SharedPreferences
+    private lateinit var spotifyRemote: SpotifyRemoteManager
+    private lateinit var btnSpotify: Button
+    private lateinit var tvSpotifyStatus: TextView
+    private lateinit var btnRetryLyrics: Button
     private var lastScrolledIndex = -1
     private var currentColors: AlbumColors? = null
     private var lyricsFontSizeSp = 16
@@ -98,6 +103,9 @@ class MainActivity : AppCompatActivity() {
         tvAppSubtitle = findViewById(R.id.tv_app_subtitle)
         tvStatus = findViewById(R.id.tv_status)
         btnPermission = findViewById(R.id.btn_permission)
+        btnSpotify = findViewById(R.id.btn_spotify)
+        tvSpotifyStatus = findViewById(R.id.tv_spotify_status)
+        btnRetryLyrics = findViewById(R.id.btn_retry_lyrics)
         ivAlbumArt = findViewById(R.id.iv_album_art)
         tvTrack = findViewById(R.id.tv_track)
         tvSource = findViewById(R.id.tv_source)
@@ -115,6 +123,12 @@ class MainActivity : AppCompatActivity() {
         btnPermission.setOnClickListener {
             startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
         }
+
+        spotifyRemote = SpotifyRemoteManager(this, mediaTracker) { status ->
+            runOnUiThread { updateSpotifyStatus(status) }
+        }
+        btnSpotify.setOnClickListener { spotifyRemote.connect(showAuthView = true) }
+        btnRetryLyrics.setOnClickListener { mediaTracker.retryCurrentLyrics() }
 
         findViewById<Button>(R.id.btn_delay_minus).setOnClickListener {
             mediaTracker.adjustOffset(-100)
@@ -233,6 +247,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 mediaTracker.state.collect { state ->
+                    btnRetryLyrics.visibility = if (
+                        state.status == LyricsStatus.NOT_FOUND || state.status == LyricsStatus.ERROR
+                    ) View.VISIBLE else View.GONE
                     updatePermissionUi()
                     updateDelayDisplay(state.offsetMs)
                     updateAlbumArt(state)
@@ -316,6 +333,44 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    override fun onStop() {
+        spotifyRemote.disconnect()
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (::spotifyRemote.isInitialized && prefs.getBoolean("spotify_enabled", false)) {
+            spotifyRemote.connect(showAuthView = false)
+        }
+    }
+
+    private fun updateSpotifyStatus(status: SpotifyRemoteManager.Status) {
+        when (status) {
+            SpotifyRemoteManager.Status.DISCONNECTED -> {
+                btnSpotify.isEnabled = true
+                btnSpotify.text = "Connect Spotify"
+                tvSpotifyStatus.text = "Spotify not connected"
+            }
+            SpotifyRemoteManager.Status.CONNECTING -> {
+                btnSpotify.isEnabled = false
+                btnSpotify.text = "Connecting…"
+                tvSpotifyStatus.text = "Waiting for Spotify authorization"
+            }
+            SpotifyRemoteManager.Status.CONNECTED -> {
+                prefs.edit().putBoolean("spotify_enabled", true).apply()
+                btnSpotify.isEnabled = false
+                btnSpotify.text = "Spotify connected"
+                tvSpotifyStatus.text = "Using Spotify player state"
+            }
+            SpotifyRemoteManager.Status.ERROR -> {
+                btnSpotify.isEnabled = true
+                btnSpotify.text = "Retry Spotify"
+                tvSpotifyStatus.text = "Could not connect. Open Spotify and try again."
             }
         }
     }

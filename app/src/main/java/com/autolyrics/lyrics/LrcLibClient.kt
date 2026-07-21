@@ -27,7 +27,8 @@ object LrcLibClient {
         @SerializedName("duration") val duration: Int?,
         @SerializedName("instrumental") val instrumental: Boolean?,
         @SerializedName("plainLyrics") val plainLyrics: String?,
-        @SerializedName("syncedLyrics") val syncedLyrics: String?
+        @SerializedName("syncedLyrics") val syncedLyrics: String?,
+        val matchedAlternateArtist: Boolean = false
     )
 
     fun getLyrics(
@@ -66,6 +67,26 @@ object LrcLibClient {
             it.plainLyrics != null && withinDuration(it, durationSec)
         }
         if (plainResult != null) return plainResult
+
+        // Traditional songs and covers often have no entry for the exact artist.
+        // Conservatively borrow the closest-duration recording with the exact
+        // same title, keeping the tolerance tight to limit arrangement mismatch.
+        if (artistName.isNotBlank() && durationSec > 0) {
+            val alternateResults = searchAll(trackName, "")
+                .filter {
+                    it.trackName.equals(trackName, ignoreCase = true) &&
+                        it.instrumental != true &&
+                        withinDuration(it, durationSec)
+                }
+                .sortedBy { kotlin.math.abs((it.duration ?: durationSec) - durationSec) }
+
+            alternateResults.firstOrNull { it.syncedLyrics != null }?.let {
+                return it.copy(matchedAlternateArtist = true)
+            }
+            alternateResults.firstOrNull { it.plainLyrics != null }?.let {
+                return it.copy(matchedAlternateArtist = true)
+            }
+        }
 
         return null
     }

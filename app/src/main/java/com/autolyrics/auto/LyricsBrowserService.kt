@@ -172,7 +172,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             }
             LyricsStatus.ERROR -> {
                 addTrackHeader(state, items)
-                items.add(buildTextItem("error", "Error loading lyrics"))
+                items.add(buildTextItem("error", "Lyrics services unavailable — try again"))
             }
             LyricsStatus.FOUND -> {
                 addTrackHeader(state, items)
@@ -461,7 +461,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         return when (state.status) {
             LyricsStatus.LOADING -> "Loading lyrics…"
             LyricsStatus.NOT_FOUND -> "No lyrics found"
-            LyricsStatus.ERROR -> "Error loading lyrics"
+            LyricsStatus.ERROR -> "Lyrics services unavailable"
             else -> ""
         }
     }

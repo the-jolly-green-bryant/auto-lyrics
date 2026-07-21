@@ -136,7 +136,7 @@ class PerformanceActivity : AppCompatActivity() {
             }
             LyricsStatus.ERROR -> {
                 prevLine.text = ""
-                currentLine.text = "Error loading lyrics"
+                currentLine.text = "Lyrics services unavailable"
                 nextLine.text = ""
             }
             LyricsStatus.PLAIN_ONLY -> {

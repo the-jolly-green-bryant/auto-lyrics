@@ -313,7 +313,7 @@ class MainActivity : AppCompatActivity() {
                             tvLyrics.text = "No lyrics found for this track."
                         }
                         LyricsStatus.ERROR -> {
-                            tvLyrics.text = "Error loading lyrics.\nCheck your internet connection."
+                            tvLyrics.text = "Lyrics services aren’t responding.\nTry again in a moment."
                         }
                         LyricsStatus.FOUND -> {
                             renderSyncedLyrics(state)

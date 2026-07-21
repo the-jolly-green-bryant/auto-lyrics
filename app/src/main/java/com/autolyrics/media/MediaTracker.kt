@@ -12,6 +12,7 @@ import android.os.SystemClock
 import com.autolyrics.lyrics.LrcLibClient
 import com.autolyrics.lyrics.LrcParser
 import com.autolyrics.lyrics.LyricsCache
+import com.autolyrics.lyrics.LyricsOvhClient
 import com.autolyrics.lyrics.LyricsTranslator
 import com.autolyrics.lyrics.MetadataCleaner
 import com.autolyrics.lyrics.SyncLrcClient
@@ -536,7 +537,9 @@ class MediaTracker private constructor(context: Context) {
         // A later provider's synced result beats an earlier provider's plain text.
         val lrcLib = fetchFromLrcLib(track)
         if (lrcLib?.status == LyricsStatus.FOUND) return lrcLib
-        return syncLrc ?: lrcLib
+
+        val lyricsOvh = fetchFromLyricsOvh(track)
+        return syncLrc ?: lrcLib ?: lyricsOvh
     }
 
     private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
@@ -627,6 +630,17 @@ class MediaTracker private constructor(context: Context) {
         }
 
         return null
+    }
+
+    private fun fetchFromLyricsOvh(track: TrackInfo): FetchResult? {
+        val lyrics = LyricsOvhClient.getLyrics(track.title, track.artist) ?: return null
+        val lines = lyrics.lines()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map { text -> LyricLine(0L, text) }
+        return lines.takeIf { it.isNotEmpty() }?.let {
+            FetchResult(it, LyricsStatus.PLAIN_ONLY, "Lyrics.ovh · Plain")
+        }
     }
 
     private fun translateIfNeeded(lines: List<LyricLine>, track: TrackInfo) {

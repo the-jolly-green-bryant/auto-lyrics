@@ -90,16 +90,11 @@ AutoLyricsApp (Application)
 GitHub Actions builds the signed debug APK for every pull request and every push
 to `main`. Successful builds are retained as workflow artifacts for 14 days.
 
-To publish a GitHub release:
-
-1. Increment `versionCode` and `versionName` in `app/build.gradle.kts`.
-2. Merge or push the change to `main`.
-3. Create and push a tag exactly matching `v<versionName>` (for example,
-   `v1.10.0` or `v1.10.0-beta`).
-
-The tag build publishes `auto-lyrics-<versionName>.apk` and its SHA-256 checksum.
-Tags containing a hyphen are published as prereleases. A mismatched tag and app
-version fails before building, preventing mislabeled APKs.
+Every successful push to `main` also publishes a GitHub prerelease containing
+`auto-lyrics-<versionName>.apk` and its SHA-256 checksum. The workflow creates a
+unique `build-<run number>` tag automatically, so contributors do not need to
+create or push release tags manually. Pull requests build the APK but do not
+publish releases.
 
 ## Key Constants (`LyricsBrowserService`)
 

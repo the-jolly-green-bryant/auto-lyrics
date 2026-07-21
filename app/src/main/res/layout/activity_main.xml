@@ -4,25 +4,44 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#121212">
+    android:background="@color/background_dark">
 
     <!-- App Bar -->
     <LinearLayout
         android:id="@+id/layout_app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#1E1E2E"
-        android:elevation="4dp"
-        android:padding="20dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/surface_dark"
+        android:elevation="2dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="14dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_lyrics"
+            android:background="@drawable/bg_source_pill"
+            android:contentDescription="@string/app_name" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
         <TextView
             android:id="@+id/tv_app_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Auto Lyrics"
-            android:textColor="#E0E0FF"
-            android:textSize="24sp"
+            android:textColor="@color/on_surface"
+            android:textSize="21sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium" />
 
@@ -30,10 +49,11 @@
             android:id="@+id/tv_app_subtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Synced lyrics on Android Auto"
-            android:textColor="#8888AA"
-            android:textSize="14sp"
-            android:paddingTop="4dp" />
+            android:text="Live lyrics for Spotify"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:paddingTop="2dp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Permission Status -->
@@ -41,13 +61,13 @@
         android:id="@+id/tv_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="14dp"
+        android:padding="12dp"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:gravity="center"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="12dp" />
 
     <Button
         android:id="@+id/btn_permission"
@@ -60,13 +80,19 @@
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/layout_track_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="8dp">
+        android:background="@drawable/bg_panel"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <Button
             android:id="@+id/btn_spotify"
@@ -74,8 +100,9 @@
             android:layout_height="wrap_content"
             android:text="Connect Spotify"
             android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#1DB954" />
+            android:textColor="#07130B"
+            android:textStyle="bold"
+            android:backgroundTint="@color/spotify_green" />
 
         <TextView
             android:id="@+id/tv_spotify_status"
@@ -84,8 +111,9 @@
             android:layout_weight="1"
             android:layout_marginStart="12dp"
             android:text="Spotify not connected"
-            android:textColor="#AAAACC"
-            android:textSize="12sp" />
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp" />
     </LinearLayout>
 
     <Button
@@ -104,15 +132,17 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp">
+        android:background="@drawable/bg_panel"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="10dp"
+        android:padding="12dp"
+        android:visibility="gone">
 
         <ImageView
             android:id="@+id/iv_album_art"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
             android:scaleType="centerCrop"
             android:visibility="gone"
             android:layout_marginEnd="12dp"
@@ -128,8 +158,8 @@
                 android:id="@+id/tv_track"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#BB86FC"
-                android:textSize="16sp"
+                android:textColor="@color/on_surface"
+                android:textSize="17sp"
                 android:textStyle="bold"
                 android:lineSpacingExtra="3dp"
                 android:maxLines="2"
@@ -146,7 +176,7 @@
             android:paddingEnd="8dp"
             android:paddingTop="3dp"
             android:paddingBottom="3dp"
-            android:textColor="#AAAACC"
+            android:textColor="@color/spotify_green"
             android:textSize="10sp"
             android:fontFamily="sans-serif-medium"
             android:background="@drawable/bg_source_pill"
@@ -161,17 +191,17 @@
         android:gravity="center_vertical|end"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp">
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <Button
             android:id="@+id/btn_performance_mode"
             android:layout_width="wrap_content"
             android:layout_height="34dp"
-            android:text="⚡ Performance"
+            android:text="Performance mode"
             android:textSize="11sp"
-            android:textColor="#CCCCDD"
-            android:backgroundTint="#2A2A3E"
+            android:textColor="@color/on_surface"
+            android:backgroundTint="@color/surface_control"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:textAllCaps="false"
@@ -198,7 +228,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#1A1A2A"
+        android:background="@color/surface_dark"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingTop="10dp"
@@ -489,7 +519,7 @@
         android:id="@+id/divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#2A2A3A"
+        android:background="#20FFFFFF"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp" />
 
@@ -509,10 +539,13 @@
                 android:id="@+id/tv_lyrics"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="20dp"
-                android:textColor="#CCCCDD"
+                android:paddingStart="28dp"
+                android:paddingEnd="28dp"
+                android:paddingTop="28dp"
+                android:paddingBottom="40dp"
+                android:textColor="@color/on_surface"
                 android:textSize="16sp"
-                android:lineSpacingExtra="6dp"
+                android:lineSpacingExtra="8dp"
                 android:fontFamily="sans-serif"
                 android:gravity="center_horizontal"
                 android:text="Play a song to see lyrics here.\n\nLyrics will also appear on Android Auto." />
@@ -526,8 +559,8 @@
             android:layout_marginBottom="12dp"
             android:text="↓ Jump to Current"
             android:textSize="12sp"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#6200EE"
+            android:backgroundTint="@color/spotify_green"
+            android:textColor="#07130B"
             android:elevation="6dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
@@ -545,9 +578,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#1A1A2A"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:background="@color/surface_dark"
+        android:elevation="8dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -561,8 +595,8 @@
                 android:layout_height="36dp"
                 android:text="−"
                 android:textSize="18sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
+                android:textColor="@color/on_surface"
+                android:backgroundTint="@color/surface_control"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:padding="0dp"
@@ -576,7 +610,7 @@
                 android:layout_marginStart="12dp"
                 android:layout_marginEnd="12dp"
                 android:text="Sync: 0ms"
-                android:textColor="#8888AA"
+                android:textColor="@color/text_secondary"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium"
                 android:minWidth="100dp"
@@ -588,8 +622,8 @@
                 android:layout_height="36dp"
                 android:text="+"
                 android:textSize="18sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
+                android:textColor="@color/on_surface"
+                android:backgroundTint="@color/surface_control"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:padding="0dp"
@@ -602,8 +636,8 @@
                 android:layout_height="36dp"
                 android:text="Reset"
                 android:textSize="11sp"
-                android:textColor="#8888AA"
-                android:backgroundTint="#222233"
+                android:textColor="@color/text_secondary"
+                android:backgroundTint="@color/surface_control"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:layout_marginStart="8dp"
@@ -628,8 +662,9 @@
                 android:layout_height="34dp"
                 android:text="Tap to Sync"
                 android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
+                android:textColor="#07130B"
+                android:textStyle="bold"
+                android:backgroundTint="@color/spotify_green"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:textAllCaps="false"

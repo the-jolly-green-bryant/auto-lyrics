@@ -259,7 +259,7 @@ class PerformanceActivity : AppCompatActivity() {
     }
 
     companion object {
-        private val DEFAULT_ACCENT = Color.parseColor("#FFD54F")
+        private val DEFAULT_ACCENT = Color.parseColor("#1ED760")
 
         private fun setAlpha(color: Int, alpha: Float): Int {
             val a = (alpha * 255).toInt().coerceIn(0, 255)

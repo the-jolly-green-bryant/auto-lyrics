@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ivAlbumArt: ImageView
     private lateinit var tvTrack: TextView
     private lateinit var tvSource: TextView
+    private lateinit var trackCard: LinearLayout
     private lateinit var tvLyrics: TextView
     private lateinit var scrollView: ScrollView
     private lateinit var delayBar: LinearLayout
@@ -109,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         ivAlbumArt = findViewById(R.id.iv_album_art)
         tvTrack = findViewById(R.id.tv_track)
         tvSource = findViewById(R.id.tv_source)
+        trackCard = findViewById(R.id.layout_track_card)
         tvLyrics = findViewById(R.id.tv_lyrics)
         scrollView = findViewById(R.id.scroll_lyrics)
         delayBar = findViewById(R.id.layout_delay)
@@ -260,9 +262,11 @@ class MainActivity : AppCompatActivity() {
                             state.track.artist else "Unknown Artist"
                         tvTrack.text = "${state.track.title}\n$artistText"
                         tvTrack.visibility = View.VISIBLE
+                        trackCard.visibility = View.VISIBLE
                     } else {
                         tvTrack.text = ""
                         tvTrack.visibility = View.GONE
+                        trackCard.visibility = View.GONE
                     }
 
                     if (state.source.isNotBlank()) {
@@ -411,10 +415,10 @@ class MainActivity : AppCompatActivity() {
             delayBar.setBackgroundColor(DEFAULT_DELAY_BAR)
             divider.setBackgroundColor(DEFAULT_DIVIDER)
 
-            tvAppTitle.setTextColor(Color.parseColor("#E0E0FF"))
-            tvAppSubtitle.setTextColor(Color.parseColor("#8888AA"))
-            tvTrack.setTextColor(Color.parseColor("#BB86FC"))
-            tvLyrics.setTextColor(Color.parseColor("#CCCCDD"))
+            tvAppTitle.setTextColor(Color.parseColor("#F7F9F7"))
+            tvAppSubtitle.setTextColor(Color.parseColor("#A5ADA7"))
+            tvTrack.setTextColor(Color.parseColor("#F7F9F7"))
+            tvLyrics.setTextColor(Color.parseColor("#F7F9F7"))
         }
     }
 
@@ -771,12 +775,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private val DEFAULT_BG = Color.parseColor("#121212")
-        private val DEFAULT_APP_BAR = Color.parseColor("#1E1E2E")
-        private val DEFAULT_DELAY_BAR = Color.parseColor("#1A1A2A")
-        private val DEFAULT_DIVIDER = Color.parseColor("#2A2A3A")
-        private val DEFAULT_HIGHLIGHT = Color.parseColor("#FFD54F")
-        private val DEFAULT_DIM = Color.parseColor("#99FFFFFF")
+        private val DEFAULT_BG = Color.parseColor("#080A09")
+        private val DEFAULT_APP_BAR = Color.parseColor("#101311")
+        private val DEFAULT_DELAY_BAR = Color.parseColor("#101311")
+        private val DEFAULT_DIVIDER = Color.parseColor("#20FFFFFF")
+        private val DEFAULT_HIGHLIGHT = Color.parseColor("#1ED760")
+        private val DEFAULT_DIM = Color.parseColor("#A5ADA7")
 
         private fun setAlpha(color: Int, alpha: Float): Int {
             val a = (alpha * 255).toInt().coerceIn(0, 255)

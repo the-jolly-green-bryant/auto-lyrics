@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_primary">#BB86FC</color>
-    <color name="purple_dark">#3700B3</color>
-    <color name="teal_accent">#03DAC5</color>
-    <color name="background_dark">#121212</color>
-    <color name="surface_dark">#1E1E2E</color>
-    <color name="on_surface">#E0E0FF</color>
-    <color name="text_secondary">#8888AA</color>
+    <color name="purple_primary">#1ED760</color>
+    <color name="purple_dark">#169C46</color>
+    <color name="teal_accent">#1ED760</color>
+    <color name="background_dark">#080A09</color>
+    <color name="surface_dark">#101311</color>
+    <color name="surface_raised">#181C19</color>
+    <color name="surface_control">#232824</color>
+    <color name="on_surface">#F7F9F7</color>
+    <color name="text_secondary">#A5ADA7</color>
+    <color name="spotify_green">#1ED760</color>
     <color name="status_ok">#2E7D32</color>
     <color name="status_warn">#E65100</color>
 </resources>

@@ -85,6 +85,22 @@ AutoLyricsApp (Application)
 | `.github/workflows/build.yml` | CI: build APK, create GitHub release with versioned filename. |
 | `app/signing.p12` | Shared signing keystore (avoids version conflicts across CI runs). |
 
+## CI and Releases
+
+GitHub Actions builds the signed debug APK for every pull request and every push
+to `main`. Successful builds are retained as workflow artifacts for 14 days.
+
+To publish a GitHub release:
+
+1. Increment `versionCode` and `versionName` in `app/build.gradle.kts`.
+2. Merge or push the change to `main`.
+3. Create and push a tag exactly matching `v<versionName>` (for example,
+   `v1.10.0` or `v1.10.0-beta`).
+
+The tag build publishes `auto-lyrics-<versionName>.apk` and its SHA-256 checksum.
+Tags containing a hyphen are published as prereleases. A mismatched tag and app
+version fails before building, preventing mislabeled APKs.
+
 ## Key Constants (`LyricsBrowserService`)
 
 | Constant | Value | Purpose |

@@ -38,11 +38,12 @@ object LrcLibClient {
         albumName: String,
         durationSec: Int
     ): LrcLibResponse? {
-        // Priority 1: exact match with synced lyrics
-        if (durationSec > 0 && albumName.isNotBlank()) {
-            val exact = getExact(trackName, artistName, albumName, durationSec)
-            if (exact?.syncedLyrics != null) return exact
-        }
+        // Fetch each query shape at most once. Repeating exact calls made an
+        // upstream outage multiply into long UI stalls.
+        val exact = if (durationSec > 0 && albumName.isNotBlank()) {
+            getExact(trackName, artistName, albumName, durationSec)
+        } else null
+        if (exact?.syncedLyrics != null) return exact
 
         // Priority 2: search for synced lyrics (duration-guarded)
         val searchResults = searchAll(trackName, artistName)
@@ -51,19 +52,10 @@ object LrcLibClient {
         }
         if (syncedResult != null) return syncedResult
 
-        // Priority 3: exact match without album for synced lyrics
-        if (durationSec > 0) {
-            val exactNoAlbum = getExact(trackName, artistName, "", durationSec)
-            if (exactNoAlbum?.syncedLyrics != null) return exactNoAlbum
-        }
+        // Priority 3: exact match with plain lyrics
+        if (exact?.plainLyrics != null) return exact
 
-        // Priority 4: exact match with any lyrics (including plain)
-        if (durationSec > 0 && albumName.isNotBlank()) {
-            val exact = getExact(trackName, artistName, albumName, durationSec)
-            if (exact?.plainLyrics != null) return exact
-        }
-
-        // Priority 5: search result with plain lyrics (duration-guarded)
+        // Priority 4: search result with plain lyrics (duration-guarded)
         val plainResult = searchResults.firstOrNull {
             it.plainLyrics != null && withinDuration(it, durationSec)
         }

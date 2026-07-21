@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.SystemClock
 import com.autolyrics.lyrics.LrcLibClient
 import com.autolyrics.lyrics.LrcParser
+import com.autolyrics.lyrics.LyrHubClient
 import com.autolyrics.lyrics.LyricsCache
 import com.autolyrics.lyrics.LyricsOvhClient
 import com.autolyrics.lyrics.LyricsTranslator
@@ -539,7 +540,10 @@ class MediaTracker private constructor(context: Context) {
         if (lrcLib?.status == LyricsStatus.FOUND) return lrcLib
 
         val lyricsOvh = fetchFromLyricsOvh(track)
-        return syncLrc ?: lrcLib ?: lyricsOvh
+        val lyrHub = if (syncLrc == null && lrcLib == null && lyricsOvh == null) {
+            fetchFromLyrHub(track)
+        } else null
+        return syncLrc ?: lrcLib ?: lyricsOvh ?: lyrHub
     }
 
     private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
@@ -548,7 +552,13 @@ class MediaTracker private constructor(context: Context) {
             // the worker if an attempt exceeds its deadline so LOADING cannot
             // remain on screen for several minutes when a provider is unhealthy.
             val result = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
-                runInterruptible(Dispatchers.IO) { fetchBestLyrics(track) }
+                runInterruptible(Dispatchers.IO) {
+                    if (attempt == 0) {
+                        fetchBestLyrics(track)
+                    } else {
+                        fetchFastPlainFallback(track) ?: fetchBestLyrics(track)
+                    }
+                }
             }
             if (result != null) return result
             if (attempt < LYRICS_FETCH_ATTEMPTS - 1) {
@@ -556,6 +566,10 @@ class MediaTracker private constructor(context: Context) {
             }
         }
         return null
+    }
+
+    private fun fetchFastPlainFallback(track: TrackInfo): FetchResult? {
+        return fetchFromLyricsOvh(track) ?: fetchFromLyrHub(track)
     }
 
     private fun fetchFromSyncLrc(track: TrackInfo): FetchResult? {
@@ -640,6 +654,17 @@ class MediaTracker private constructor(context: Context) {
             .map { text -> LyricLine(0L, text) }
         return lines.takeIf { it.isNotEmpty() }?.let {
             FetchResult(it, LyricsStatus.PLAIN_ONLY, "Lyrics.ovh · Plain")
+        }
+    }
+
+    private fun fetchFromLyrHub(track: TrackInfo): FetchResult? {
+        val lyrics = LyrHubClient.getLyrics(track.title, track.artist) ?: return null
+        val lines = lyrics.lines()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map { text -> LyricLine(0L, text) }
+        return lines.takeIf { it.isNotEmpty() }?.let {
+            FetchResult(it, LyricsStatus.PLAIN_ONLY, "LyrHub · Plain")
         }
     }
 

@@ -203,7 +203,6 @@ class PerformanceActivity : AppCompatActivity() {
             wordPopAnimator?.cancel()
 
             val baseSizePx = currentLine.textSize.toInt()
-            val targetSizePx = (baseSizePx * 1.5).toInt()
             val accentBg = setAlpha(accentColor, 0.30f)
 
             wordPopAnimator = ValueAnimator.ofFloat(1.0f, 1.5f).apply {

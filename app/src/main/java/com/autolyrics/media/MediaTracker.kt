@@ -143,6 +143,26 @@ class MediaTracker private constructor(context: Context) {
         activeController?.transportControls?.play()
     }
 
+    fun pausePlayback() {
+        activeController?.transportControls?.pause()
+    }
+
+    fun stopPlayback() {
+        activeController?.transportControls?.stop()
+    }
+
+    fun skipToNext() {
+        activeController?.transportControls?.skipToNext()
+    }
+
+    fun skipToPrevious() {
+        activeController?.transportControls?.skipToPrevious()
+    }
+
+    fun seekTo(positionMs: Long) {
+        activeController?.transportControls?.seekTo(positionMs.coerceAtLeast(0L))
+    }
+
     fun setOffset(ms: Long) {
         lyricsOffsetMs = ms
         saveOffsetForCurrentTrack()

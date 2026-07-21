@@ -2,8 +2,6 @@ package com.autolyrics.auto
 
 import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.media.session.MediaController
-import android.media.session.PlaybackState
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -661,47 +659,35 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
     }
 
-    // --- Transport controls ---
-
-    private fun getActiveMediaController(): MediaController? {
-        val sessionManager = getSystemService(MEDIA_SESSION_SERVICE)
-            as? android.media.session.MediaSessionManager ?: return null
-        return try {
-            val component = android.content.ComponentName(
-                this, com.autolyrics.media.MediaListenerService::class.java
-            )
-            sessionManager.getActiveSessions(component)
-                .firstOrNull { it.packageName != packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING }
-                ?: sessionManager.getActiveSessions(component)
-                    .firstOrNull { it.packageName != packageName }
-        } catch (_: SecurityException) {
-            null
-        }
-    }
-
     private inner class SessionCallback : MediaSessionCompat.Callback() {
         override fun onPlay() {
-            getActiveMediaController()?.transportControls?.play()
+            mediaTracker.resumePlayback()
         }
 
         override fun onPause() {
-            getActiveMediaController()?.transportControls?.pause()
+            mediaTracker.pausePlayback()
         }
 
         override fun onSkipToNext() {
-            getActiveMediaController()?.transportControls?.skipToNext()
+            mediaTracker.skipToNext()
         }
 
         override fun onSkipToPrevious() {
-            getActiveMediaController()?.transportControls?.skipToPrevious()
+            mediaTracker.skipToPrevious()
         }
 
         override fun onStop() {
-            getActiveMediaController()?.transportControls?.stop()
+            mediaTracker.stopPlayback()
         }
 
         override fun onSeekTo(pos: Long) {
-            getActiveMediaController()?.transportControls?.seekTo(pos)
+            mediaTracker.seekTo(pos)
+        }
+
+        override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+            // Auto Lyrics mirrors the active player's catalog rather than
+            // owning one, so voice play requests resume that active session.
+            mediaTracker.resumePlayback()
         }
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
@@ -723,7 +709,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             if (state.status != LyricsStatus.FOUND) return
             val line = state.lines.getOrNull(index) ?: return
             if (line.timeMs > 0) {
-                getActiveMediaController()?.transportControls?.seekTo(line.timeMs)
+                mediaTracker.seekTo(line.timeMs)
             }
         }
     }

@@ -68,6 +68,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSpotify: Button
     private lateinit var tvSpotifyStatus: TextView
     private lateinit var btnRetryLyrics: Button
+    private lateinit var btnPreviousTrack: Button
+    private lateinit var btnNextTrack: Button
     private var lastScrolledIndex = -1
     private var currentColors: AlbumColors? = null
     private var lyricsFontSizeSp = 16
@@ -107,6 +109,8 @@ class MainActivity : AppCompatActivity() {
         btnSpotify = findViewById(R.id.btn_spotify)
         tvSpotifyStatus = findViewById(R.id.tv_spotify_status)
         btnRetryLyrics = findViewById(R.id.btn_retry_lyrics)
+        btnPreviousTrack = findViewById(R.id.btn_previous_track)
+        btnNextTrack = findViewById(R.id.btn_next_track)
         ivAlbumArt = findViewById(R.id.iv_album_art)
         tvTrack = findViewById(R.id.tv_track)
         tvSource = findViewById(R.id.tv_source)
@@ -131,6 +135,8 @@ class MainActivity : AppCompatActivity() {
         }
         btnSpotify.setOnClickListener { spotifyRemote.connect(showAuthView = true) }
         btnRetryLyrics.setOnClickListener { mediaTracker.retryCurrentLyrics() }
+        btnPreviousTrack.setOnClickListener { mediaTracker.skipToPrevious() }
+        btnNextTrack.setOnClickListener { mediaTracker.skipToNext() }
 
         findViewById<Button>(R.id.btn_delay_minus).setOnClickListener {
             mediaTracker.adjustOffset(-100)
@@ -249,6 +255,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 mediaTracker.state.collect { state ->
+                    updateTransportControls(state.track != null)
                     btnRetryLyrics.visibility = if (
                         state.status == LyricsStatus.NOT_FOUND || state.status == LyricsStatus.ERROR
                     ) View.VISIBLE else View.GONE
@@ -377,6 +384,14 @@ class MainActivity : AppCompatActivity() {
                 tvSpotifyStatus.text = "Could not connect. Open Spotify and try again."
             }
         }
+    }
+
+    private fun updateTransportControls(hasTrack: Boolean) {
+        btnPreviousTrack.isEnabled = hasTrack
+        btnNextTrack.isEnabled = hasTrack
+        val alpha = if (hasTrack) 1f else DISABLED_CONTROL_ALPHA
+        btnPreviousTrack.alpha = alpha
+        btnNextTrack.alpha = alpha
     }
 
     private fun updateAlbumArt(state: LyricsState) {
@@ -781,6 +796,7 @@ class MainActivity : AppCompatActivity() {
         private val DEFAULT_DIVIDER = Color.parseColor("#20FFFFFF")
         private val DEFAULT_HIGHLIGHT = Color.parseColor("#1ED760")
         private val DEFAULT_DIM = Color.parseColor("#A5ADA7")
+        private const val DISABLED_CONTROL_ALPHA = 0.38f
 
         private fun setAlpha(color: Int, alpha: Float): Int {
             val a = (alpha * 255).toInt().coerceIn(0, 255)

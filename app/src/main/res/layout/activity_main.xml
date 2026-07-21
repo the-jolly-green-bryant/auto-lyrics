@@ -97,7 +97,7 @@
             android:id="@+id/btn_spotify"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Connect Spotify"
+            android:text="@string/connect_spotify"
             android:textAllCaps="false"
             android:textColor="#07130B"
             android:textStyle="bold"
@@ -109,7 +109,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="12dp"
-            android:text="Spotify not connected"
+            android:text="@string/spotify_not_connected"
             android:textColor="@color/text_secondary"
             android:textSize="12sp"
             android:lineSpacingExtra="2dp" />

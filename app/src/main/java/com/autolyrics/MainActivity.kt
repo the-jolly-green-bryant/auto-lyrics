@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private var aaOffsetMs = 0L
     private var userScrolling = false
     private var userTouching = false
+    private var spotifyStatus = SpotifyRemoteManager.Status.DISCONNECTED
 
     private var plainScrollAnimator: ValueAnimator? = null
     private var lastPlainTrackTitle: String? = null
@@ -133,7 +134,13 @@ class MainActivity : AppCompatActivity() {
         spotifyRemote = SpotifyRemoteManager(this, mediaTracker) { status ->
             runOnUiThread { updateSpotifyStatus(status) }
         }
-        btnSpotify.setOnClickListener { spotifyRemote.connect(showAuthView = true) }
+        btnSpotify.setOnClickListener {
+            if (spotifyStatus == SpotifyRemoteManager.Status.CONNECTED) {
+                openSpotify()
+            } else {
+                spotifyRemote.connect(showAuthView = true)
+            }
+        }
         btnRetryLyrics.setOnClickListener { mediaTracker.retryCurrentLyrics() }
         btnPreviousTrack.setOnClickListener { mediaTracker.skipToPrevious() }
         btnNextTrack.setOnClickListener { mediaTracker.skipToNext() }
@@ -361,29 +368,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSpotifyStatus(status: SpotifyRemoteManager.Status) {
+        spotifyStatus = status
         when (status) {
             SpotifyRemoteManager.Status.DISCONNECTED -> {
                 btnSpotify.isEnabled = true
-                btnSpotify.text = "Connect Spotify"
-                tvSpotifyStatus.text = "Spotify not connected"
+                btnSpotify.setText(R.string.connect_spotify)
+                tvSpotifyStatus.setText(R.string.spotify_not_connected)
             }
             SpotifyRemoteManager.Status.CONNECTING -> {
                 btnSpotify.isEnabled = false
-                btnSpotify.text = "Connecting…"
-                tvSpotifyStatus.text = "Waiting for Spotify authorization"
+                btnSpotify.setText(R.string.spotify_connecting)
+                tvSpotifyStatus.setText(R.string.spotify_waiting_for_authorization)
             }
             SpotifyRemoteManager.Status.CONNECTED -> {
                 prefs.edit().putBoolean("spotify_enabled", true).apply()
-                btnSpotify.isEnabled = false
-                btnSpotify.text = "Spotify connected"
-                tvSpotifyStatus.text = "Using Spotify player state"
+                btnSpotify.isEnabled = true
+                btnSpotify.setText(R.string.open_spotify)
+                tvSpotifyStatus.setText(R.string.using_spotify_player_state)
             }
             SpotifyRemoteManager.Status.ERROR -> {
                 btnSpotify.isEnabled = true
-                btnSpotify.text = "Retry Spotify"
-                tvSpotifyStatus.text = "Could not connect. Open Spotify and try again."
+                btnSpotify.setText(R.string.retry_spotify)
+                tvSpotifyStatus.setText(R.string.spotify_connection_error)
             }
         }
+    }
+
+    private fun openSpotify() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(SPOTIFY_PACKAGE_NAME)
+        if (launchIntent == null) {
+            tvSpotifyStatus.setText(R.string.spotify_not_installed)
+            return
+        }
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        startActivity(launchIntent)
     }
 
     private fun updateTransportControls(hasTrack: Boolean) {
@@ -797,6 +815,7 @@ class MainActivity : AppCompatActivity() {
         private val DEFAULT_HIGHLIGHT = Color.parseColor("#1ED760")
         private val DEFAULT_DIM = Color.parseColor("#A5ADA7")
         private const val DISABLED_CONTROL_ALPHA = 0.38f
+        private const val SPOTIFY_PACKAGE_NAME = "com.spotify.music"
 
         private fun setAlpha(color: Int, alpha: Float): Int {
             val a = (alpha * 255).toInt().coerceIn(0, 255)

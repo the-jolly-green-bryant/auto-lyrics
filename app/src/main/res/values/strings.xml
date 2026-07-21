@@ -4,4 +4,13 @@
     <string name="lyrics_service_name">Lyrics</string>
     <string name="previous_track">Previous track</string>
     <string name="next_track">Next track</string>
+    <string name="connect_spotify">Connect Spotify</string>
+    <string name="open_spotify">Open Spotify</string>
+    <string name="retry_spotify">Retry Spotify</string>
+    <string name="spotify_connecting">Connecting…</string>
+    <string name="spotify_not_connected">Spotify not connected</string>
+    <string name="spotify_waiting_for_authorization">Waiting for Spotify authorization</string>
+    <string name="using_spotify_player_state">Using Spotify player state</string>
+    <string name="spotify_connection_error">Could not connect. Open Spotify and try again.</string>
+    <string name="spotify_not_installed">Spotify is not installed.</string>
 </resources>

@@ -80,7 +80,6 @@
         android:visibility="gone" />
 
     <LinearLayout
-        android:id="@+id/layout_track_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -128,6 +127,7 @@
 
     <!-- Track Info + Album Art + Source -->
     <LinearLayout
+        android:id="@+id/layout_track_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"

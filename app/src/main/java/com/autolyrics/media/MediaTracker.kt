@@ -48,6 +48,15 @@ class MediaTracker private constructor(context: Context) {
     private var pendingTrack: TrackInfo? = null
     private var pendingArt: Bitmap? = null
     private var lyricsOffsetMs: Long = 0L
+    private val loadingTimeoutRunnable = Runnable {
+        if (_state.value.status == LyricsStatus.LOADING) {
+            fetchJob?.cancel()
+            _state.value = _state.value.copy(
+                status = LyricsStatus.ERROR,
+                source = ""
+            )
+        }
+    }
 
     init {
         _state.value = _state.value.copy(offsetMs = lyricsOffsetMs)
@@ -83,6 +92,7 @@ class MediaTracker private constructor(context: Context) {
             detectedLanguage = null,
             offsetMs = lyricsOffsetMs
         )
+        scheduleLoadingTimeout()
         fetchLyrics(track)
         extractAlbumColors(art)
     }
@@ -125,6 +135,7 @@ class MediaTracker private constructor(context: Context) {
             currentIndex = -1,
             currentWordIndex = -1
         )
+        scheduleLoadingTimeout()
         fetchLyrics(track)
     }
 
@@ -176,6 +187,11 @@ class MediaTracker private constructor(context: Context) {
             pendingArt = _state.value.albumArt
             handler.removeCallbacks(trackChangeRunnable)
             handler.post(trackChangeRunnable)
+        } else if (current?.spotifyUri.isNullOrBlank()) {
+            // Notification metadata and Spotify App Remote can report the same
+            // track in either order. Upgrade the existing identity with Spotify's
+            // stable URI without restarting an in-flight lyrics lookup.
+            _state.value = _state.value.copy(track = track)
         }
 
         lastPositionMs = positionMs
@@ -188,10 +204,8 @@ class MediaTracker private constructor(context: Context) {
 
     private fun sameTrack(first: TrackInfo?, second: TrackInfo?): Boolean {
         if (first == null || second == null) return false
-        if (!first.spotifyUri.isNullOrBlank() || !second.spotifyUri.isNullOrBlank()) {
-            return !first.spotifyUri.isNullOrBlank() &&
-                !second.spotifyUri.isNullOrBlank() &&
-                first.spotifyUri == second.spotifyUri
+        if (!first.spotifyUri.isNullOrBlank() && !second.spotifyUri.isNullOrBlank()) {
+            return first.spotifyUri == second.spotifyUri
         }
         return first.title.equals(second.title, ignoreCase = true) &&
             first.artist.equals(second.artist, ignoreCase = true) &&
@@ -368,7 +382,7 @@ class MediaTracker private constructor(context: Context) {
                 if (cached != null) {
                     val (lines, status, source) = cached
                     withContext(Dispatchers.Main) {
-                        if (_state.value.track != track) return@withContext
+                        if (!sameTrack(_state.value.track, track)) return@withContext
                         _state.value = _state.value.copy(
                             lines = lines,
                             currentIndex = -1,
@@ -376,6 +390,7 @@ class MediaTracker private constructor(context: Context) {
                             status = status,
                             source = "$source (cached)"
                         )
+                        clearLoadingTimeout()
                         if (status == LyricsStatus.FOUND) {
                             updateCurrentPosition()
                         }
@@ -389,7 +404,7 @@ class MediaTracker private constructor(context: Context) {
                 val result = fetchBestLyricsWithRetry(track)
 
                 withContext(Dispatchers.Main) {
-                    if (_state.value.track != track) return@withContext
+                    if (!sameTrack(_state.value.track, track)) return@withContext
 
                     if (result != null) {
                         lyricsCache.put(
@@ -407,6 +422,7 @@ class MediaTracker private constructor(context: Context) {
                             status = result.status,
                             source = result.source
                         )
+                        clearLoadingTimeout()
                         if (result.status == LyricsStatus.FOUND) {
                             updateCurrentPosition()
                         }
@@ -417,6 +433,7 @@ class MediaTracker private constructor(context: Context) {
                             status = LyricsStatus.NOT_FOUND,
                             source = ""
                         )
+                        clearLoadingTimeout()
                     }
                 }
 
@@ -425,15 +442,25 @@ class MediaTracker private constructor(context: Context) {
                 throw e
             } catch (_: Exception) {
                 withContext(Dispatchers.Main) {
-                    if (_state.value.track == track && _state.value.status == LyricsStatus.LOADING) {
+                    if (sameTrack(_state.value.track, track) && _state.value.status == LyricsStatus.LOADING) {
                         _state.value = _state.value.copy(
                             status = LyricsStatus.ERROR,
                             source = ""
                         )
+                        clearLoadingTimeout()
                     }
                 }
             }
         }
+    }
+
+    private fun scheduleLoadingTimeout() {
+        handler.removeCallbacks(loadingTimeoutRunnable)
+        handler.postDelayed(loadingTimeoutRunnable, LYRICS_LOADING_TIMEOUT_MS)
+    }
+
+    private fun clearLoadingTimeout() {
+        handler.removeCallbacks(loadingTimeoutRunnable)
     }
 
     private fun prefetchNextSong() {
@@ -494,7 +521,12 @@ class MediaTracker private constructor(context: Context) {
 
     private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
         repeat(LYRICS_FETCH_ATTEMPTS) { attempt ->
-            val result = fetchBestLyrics(track)
+            // Provider fallbacks contain several blocking HTTP calls. Interrupt
+            // the worker if an attempt exceeds its deadline so LOADING cannot
+            // remain on screen for several minutes when a provider is unhealthy.
+            val result = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
+                runInterruptible(Dispatchers.IO) { fetchBestLyrics(track) }
+            }
             if (result != null) return result
             if (attempt < LYRICS_FETCH_ATTEMPTS - 1) {
                 delay(LYRICS_RETRY_DELAYS_MS[attempt])
@@ -596,8 +628,10 @@ class MediaTracker private constructor(context: Context) {
     }
 
     companion object {
-        private const val LYRICS_FETCH_ATTEMPTS = 3
-        private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L, 2_000L)
+        private const val LYRICS_FETCH_ATTEMPTS = 2
+        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 12_000L
+        private const val LYRICS_LOADING_TIMEOUT_MS = 25_000L
+        private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L)
 
         @Volatile
         private var instance: MediaTracker? = null

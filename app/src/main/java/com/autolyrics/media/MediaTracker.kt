@@ -11,9 +11,7 @@ import android.os.Looper
 import android.os.SystemClock
 import com.autolyrics.lyrics.LrcLibClient
 import com.autolyrics.lyrics.LrcParser
-import com.autolyrics.lyrics.LyrHubClient
 import com.autolyrics.lyrics.LyricsCache
-import com.autolyrics.lyrics.LyricsOvhClient
 import com.autolyrics.lyrics.LyricsTranslator
 import com.autolyrics.lyrics.MetadataCleaner
 import com.autolyrics.lyrics.SyncLrcClient
@@ -400,7 +398,13 @@ class MediaTracker private constructor(context: Context) {
         fetchJob?.cancel()
         fetchJob = scope.launch(Dispatchers.IO) {
             try {
-                val cached = lyricsCache.get(track.title, track.artist, track.spotifyUri)
+                var cached = lyricsCache.get(track.title, track.artist, track.spotifyUri)
+                if (cached?.second == LyricsStatus.PLAIN_ONLY) {
+                    // Plain lyrics cached by older versions must not bypass the
+                    // synced-only provider policy.
+                    lyricsCache.remove(track.title, track.artist, track.spotifyUri)
+                    cached = null
+                }
                 if (cached != null) {
                     val (lines, status, source) = cached
                     withContext(Dispatchers.Main) {
@@ -509,7 +513,12 @@ class MediaTracker private constructor(context: Context) {
                         continue
                     }
 
-                    if (lyricsCache.get(title, artist) != null) return@launch
+                    val cached = lyricsCache.get(title, artist)
+                    if (cached?.second == LyricsStatus.PLAIN_ONLY) {
+                        lyricsCache.remove(title, artist)
+                    } else if (cached != null) {
+                        return@launch
+                    }
 
                     val nextTrack = TrackInfo(title, artist, "", 0)
                     val result = fetchBestLyricsWithRetry(nextTrack)
@@ -532,18 +541,11 @@ class MediaTracker private constructor(context: Context) {
 
     private fun fetchBestLyrics(track: TrackInfo): FetchResult? {
         val syncLrc = fetchFromSyncLrc(track)
-        // Karaoke and line-synced lyrics are already the best useful outcome.
         if (syncLrc?.status == LyricsStatus.FOUND) return syncLrc
 
-        // A later provider's synced result beats an earlier provider's plain text.
         val lrcLib = fetchFromLrcLib(track)
         if (lrcLib?.status == LyricsStatus.FOUND) return lrcLib
-
-        val lyricsOvh = fetchFromLyricsOvh(track)
-        val lyrHub = if (syncLrc == null && lrcLib == null && lyricsOvh == null) {
-            fetchFromLyrHub(track)
-        } else null
-        return syncLrc ?: lrcLib ?: lyricsOvh ?: lyrHub
+        return null
     }
 
     private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
@@ -553,11 +555,7 @@ class MediaTracker private constructor(context: Context) {
             // remain on screen for several minutes when a provider is unhealthy.
             val result = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
                 runInterruptible(Dispatchers.IO) {
-                    if (attempt == 0) {
-                        fetchBestLyrics(track)
-                    } else {
-                        fetchFastPlainFallback(track) ?: fetchBestLyrics(track)
-                    }
+                    fetchBestLyrics(track)
                 }
             }
             if (result != null) return result
@@ -566,10 +564,6 @@ class MediaTracker private constructor(context: Context) {
             }
         }
         return null
-    }
-
-    private fun fetchFastPlainFallback(track: TrackInfo): FetchResult? {
-        return fetchFromLyricsOvh(track) ?: fetchFromLyrHub(track)
     }
 
     private fun fetchFromSyncLrc(track: TrackInfo): FetchResult? {
@@ -592,13 +586,7 @@ class MediaTracker private constructor(context: Context) {
                 if (hasRealText) FetchResult(lines, LyricsStatus.FOUND, "SyncLRC · Synced")
                 else null
             }
-            SyncLrcClient.LyricsType.PLAIN -> {
-                val lines = result.lyrics.lines()
-                    .filter { it.isNotBlank() }
-                    .map { text -> LyricLine(0L, text) }
-                if (lines.isNotEmpty()) FetchResult(lines, LyricsStatus.PLAIN_ONLY, "SyncLRC · Plain")
-                else null
-            }
+            SyncLrcClient.LyricsType.PLAIN -> null
         }
     }
 
@@ -629,43 +617,7 @@ class MediaTracker private constructor(context: Context) {
             }
         }
 
-        if (result.plainLyrics != null) {
-            val lines = result.plainLyrics.lines()
-                .filter { it.isNotBlank() }
-                .map { text -> LyricLine(0L, text) }
-            if (lines.isNotEmpty()) {
-                val source = if (result.matchedAlternateArtist) {
-                    "LRCLIB · Plain · Alternate recording"
-                } else {
-                    "LRCLIB · Plain"
-                }
-                return FetchResult(lines, LyricsStatus.PLAIN_ONLY, source)
-            }
-        }
-
         return null
-    }
-
-    private fun fetchFromLyricsOvh(track: TrackInfo): FetchResult? {
-        val lyrics = LyricsOvhClient.getLyrics(track.title, track.artist) ?: return null
-        val lines = lyrics.lines()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .map { text -> LyricLine(0L, text) }
-        return lines.takeIf { it.isNotEmpty() }?.let {
-            FetchResult(it, LyricsStatus.PLAIN_ONLY, "Lyrics.ovh · Plain")
-        }
-    }
-
-    private fun fetchFromLyrHub(track: TrackInfo): FetchResult? {
-        val lyrics = LyrHubClient.getLyrics(track.title, track.artist) ?: return null
-        val lines = lyrics.lines()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .map { text -> LyricLine(0L, text) }
-        return lines.takeIf { it.isNotEmpty() }?.let {
-            FetchResult(it, LyricsStatus.PLAIN_ONLY, "LyrHub · Plain")
-        }
     }
 
     private fun translateIfNeeded(lines: List<LyricLine>, track: TrackInfo) {

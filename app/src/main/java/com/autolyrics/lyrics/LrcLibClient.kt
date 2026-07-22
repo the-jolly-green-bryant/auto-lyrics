@@ -32,61 +32,87 @@ object LrcLibClient {
         val matchedAlternateArtist: Boolean = false
     )
 
+    data class LookupResult(
+        val value: LrcLibResponse?,
+        val hadDefinitiveResponse: Boolean,
+        val hadUnavailableResponse: Boolean
+    )
+
+    private data class RequestResult<T>(
+        val value: T?,
+        val definitive: Boolean,
+        val unavailable: Boolean
+    )
+
     fun getLyrics(
         trackName: String,
         artistName: String,
         albumName: String,
         durationSec: Int
-    ): LrcLibResponse? {
+    ): LookupResult {
+        var hadDefinitiveResponse = false
+        var hadUnavailableResponse = false
+
+        fun <T> record(result: RequestResult<T>): T? {
+            hadDefinitiveResponse = hadDefinitiveResponse || result.definitive
+            hadUnavailableResponse = hadUnavailableResponse || result.unavailable
+            return result.value
+        }
+
         // Fetch each query shape at most once. Repeating exact calls made an
         // upstream outage multiply into long UI stalls.
         val exact = if (durationSec > 0 && albumName.isNotBlank()) {
-            getExact(trackName, artistName, albumName, durationSec)
+            record(getExact(trackName, artistName, albumName, durationSec))
         } else null
-        if (exact?.syncedLyrics != null) return exact
+        if (exact?.syncedLyrics != null) {
+            return LookupResult(exact, hadDefinitiveResponse, hadUnavailableResponse)
+        }
 
         // Priority 2: search for synced lyrics (duration-guarded)
-        val searchResults = searchAll(trackName, artistName)
+        val searchResults = record(searchAll(trackName, artistName)).orEmpty()
         val syncedResult = searchResults.firstOrNull {
             it.syncedLyrics != null && withinDuration(it, durationSec)
         }
-        if (syncedResult != null) return syncedResult
-
-        // Priority 3: exact match with plain lyrics
-        if (exact?.plainLyrics != null) return exact
-
-        // Priority 4: search result with plain lyrics (duration-guarded)
-        val plainResult = searchResults.firstOrNull {
-            it.plainLyrics != null && withinDuration(it, durationSec)
+        if (syncedResult != null) {
+            return LookupResult(syncedResult, hadDefinitiveResponse, hadUnavailableResponse)
         }
-        if (plainResult != null) return plainResult
 
         // Traditional songs and covers often have no entry for the exact artist.
         // Conservatively borrow the closest-duration recording with the exact
         // same title, keeping the tolerance tight to limit arrangement mismatch.
         if (artistName.isNotBlank() && durationSec > 0) {
-            val alternateResults = searchAll(trackName, "")
+            val alternateResults = record(searchAll(trackName, "")).orEmpty()
                 .filter {
-                    it.trackName.equals(trackName, ignoreCase = true) &&
+                    titlesEquivalent(it.trackName.orEmpty(), trackName) &&
                         it.instrumental != true &&
                         withinDuration(it, durationSec)
                 }
                 .sortedBy { kotlin.math.abs((it.duration ?: durationSec) - durationSec) }
 
             alternateResults.firstOrNull { it.syncedLyrics != null }?.let {
-                return it.copy(matchedAlternateArtist = true)
-            }
-            alternateResults.firstOrNull { it.plainLyrics != null }?.let {
-                return it.copy(matchedAlternateArtist = true)
+                return LookupResult(
+                    it.copy(matchedAlternateArtist = true),
+                    hadDefinitiveResponse,
+                    hadUnavailableResponse
+                )
             }
         }
 
-        return null
+        return LookupResult(null, hadDefinitiveResponse, hadUnavailableResponse)
     }
 
     private fun withinDuration(result: LrcLibResponse, durationSec: Int): Boolean {
         if (durationSec <= 0 || result.duration == null) return true
-        return kotlin.math.abs(result.duration - durationSec) <= 10
+        return kotlin.math.abs(result.duration - durationSec) <= 15
+    }
+
+    private fun titlesEquivalent(left: String, right: String): Boolean {
+        fun normalize(value: String): String = value
+            .lowercase()
+            .replace(Regex("""\s*[\(\[].*?\b(remaster(ed)?|live|version|edit|mix)\b.*?[\)\]]"""), "")
+            .replace(Regex("""\s+-\s+(remaster(ed)?|live|.*?version|.*?edit|.*?mix).*$"""), "")
+            .replace(Regex("""[^a-z0-9]+"""), "")
+        return normalize(left) == normalize(right)
     }
 
     private fun getExact(
@@ -94,7 +120,7 @@ object LrcLibClient {
         artistName: String,
         albumName: String,
         durationSec: Int
-    ): LrcLibResponse? {
+    ): RequestResult<LrcLibResponse> {
         val urlBuilder = "$BASE_URL/get".toHttpUrl().newBuilder()
             .addQueryParameter("track_name", trackName)
             .addQueryParameter("artist_name", artistName)
@@ -109,15 +135,23 @@ object LrcLibClient {
         return try {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    gson.fromJson(response.body?.string(), LrcLibResponse::class.java)
-                } else null
+                    RequestResult(
+                        gson.fromJson(response.body?.string(), LrcLibResponse::class.java),
+                        definitive = true,
+                        unavailable = false
+                    )
+                } else if (response.code == 404) {
+                    RequestResult(null, definitive = true, unavailable = false)
+                } else {
+                    RequestResult(null, definitive = false, unavailable = true)
+                }
             }
         } catch (_: Exception) {
-            null
+            RequestResult(null, definitive = false, unavailable = true)
         }
     }
 
-    private fun searchAll(trackName: String, artistName: String): List<LrcLibResponse> {
+    private fun searchAll(trackName: String, artistName: String): RequestResult<List<LrcLibResponse>> {
         val urlBuilder = "$BASE_URL/search".toHttpUrl().newBuilder()
             .addQueryParameter("track_name", trackName)
 
@@ -134,11 +168,19 @@ object LrcLibClient {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val type = object : TypeToken<List<LrcLibResponse>>() {}.type
-                    gson.fromJson(response.body?.string(), type) ?: emptyList()
-                } else emptyList()
+                    RequestResult(
+                        gson.fromJson(response.body?.string(), type) ?: emptyList(),
+                        definitive = true,
+                        unavailable = false
+                    )
+                } else if (response.code == 404) {
+                    RequestResult(emptyList(), definitive = true, unavailable = false)
+                } else {
+                    RequestResult(null, definitive = false, unavailable = true)
+                }
             }
         } catch (_: Exception) {
-            emptyList()
+            RequestResult(null, definitive = false, unavailable = true)
         }
     }
 }

@@ -38,19 +38,40 @@ object SyncLrcClient {
         val type: LyricsType
     )
 
-    fun getLyrics(trackName: String, artistName: String): SyncLrcResult? {
-        for (type in LyricsType.entries) {
-            val result = fetchLyrics(trackName, artistName, type)
-            if (result != null) return result
+    data class LookupResult(
+        val value: SyncLrcResult?,
+        val hadDefinitiveResponse: Boolean,
+        val hadUnavailableResponse: Boolean
+    )
+
+    fun getLyrics(trackName: String, artistName: String): LookupResult {
+        var hadDefinitiveResponse = false
+        var hadUnavailableResponse = false
+        for (type in listOf(LyricsType.KARAOKE, LyricsType.SYNCED)) {
+            when (val result = fetchLyrics(trackName, artistName, type)) {
+                is RequestResult.Found -> return LookupResult(
+                    result.value,
+                    hadDefinitiveResponse = true,
+                    hadUnavailableResponse = hadUnavailableResponse
+                )
+                RequestResult.NotFound -> hadDefinitiveResponse = true
+                RequestResult.Unavailable -> hadUnavailableResponse = true
+            }
         }
-        return null
+        return LookupResult(null, hadDefinitiveResponse, hadUnavailableResponse)
+    }
+
+    private sealed interface RequestResult {
+        data class Found(val value: SyncLrcResult) : RequestResult
+        data object NotFound : RequestResult
+        data object Unavailable : RequestResult
     }
 
     private fun fetchLyrics(
         trackName: String,
         artistName: String,
         type: LyricsType
-    ): SyncLrcResult? {
+    ): RequestResult {
         val url = "$BASE_URL/lyrics".toHttpUrl().newBuilder()
             .addQueryParameter("track", trackName)
             .addQueryParameter("artist", artistName)
@@ -64,21 +85,23 @@ object SyncLrcClient {
 
         return try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val body = response.body?.string() ?: return@use null
-                val parsed = gson.fromJson(body, SyncLrcResponse::class.java) ?: return@use null
+                if (response.code == 404) return@use RequestResult.NotFound
+                if (!response.isSuccessful) return@use RequestResult.Unavailable
+                val body = response.body?.string() ?: return@use RequestResult.NotFound
+                val parsed = gson.fromJson(body, SyncLrcResponse::class.java)
+                    ?: return@use RequestResult.NotFound
                 val lyrics = parsed.lyrics
-                if (lyrics.isNullOrBlank()) return@use null
+                if (lyrics.isNullOrBlank()) return@use RequestResult.NotFound
                 val actualType = when (parsed.type) {
                     "karaoke" -> LyricsType.KARAOKE
                     "synced" -> LyricsType.SYNCED
                     "plain" -> LyricsType.PLAIN
                     else -> type
                 }
-                SyncLrcResult(lyrics, actualType)
+                RequestResult.Found(SyncLrcResult(lyrics, actualType))
             }
         } catch (_: Exception) {
-            null
+            RequestResult.Unavailable
         }
     }
 }

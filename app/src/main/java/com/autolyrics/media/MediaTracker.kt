@@ -42,6 +42,8 @@ class MediaTracker private constructor(context: Context) {
     private var lastPositionUpdateTime: Long = 0
     private var playbackSpeed: Float = 1.0f
     private var fetchJob: Job? = null
+    private var providerRetryJob: Job? = null
+    private var providerRetryAttempt = 0
     private var prefetchJob: Job? = null
     private var artJob: Job? = null
     private var translationJob: Job? = null
@@ -78,6 +80,8 @@ class MediaTracker private constructor(context: Context) {
         if (sameTrack(track, current)) return@Runnable
 
         translationJob?.cancel()
+        providerRetryJob?.cancel()
+        providerRetryAttempt = 0
         lyricsOffsetMs = savedOffsetFor(track)
         _state.value = _state.value.copy(
             track = track,
@@ -127,6 +131,8 @@ class MediaTracker private constructor(context: Context) {
 
     fun retryCurrentLyrics() {
         val track = _state.value.track ?: return
+        providerRetryJob?.cancel()
+        providerRetryAttempt = 0
         lyricsCache.remove(track.title, track.artist, track.spotifyUri)
         _state.value = _state.value.copy(
             status = LyricsStatus.LOADING,
@@ -427,7 +433,8 @@ class MediaTracker private constructor(context: Context) {
                     return@launch
                 }
 
-                val result = fetchBestLyricsWithRetry(track)
+                val outcome = fetchBestLyricsWithRetry(track)
+                val result = outcome.result
 
                 withContext(Dispatchers.Main) {
                     if (!sameTrack(_state.value.track, track)) return@withContext
@@ -454,12 +461,21 @@ class MediaTracker private constructor(context: Context) {
                         }
                         translateIfNeeded(result.lines, track)
                     } else {
-                        lyricsCache.putMissing(track.title, track.artist, track.spotifyUri)
+                        if (outcome.hadDefinitiveResponse && !outcome.hadUnavailableResponse) {
+                            lyricsCache.putMissing(track.title, track.artist, track.spotifyUri)
+                        }
                         _state.value = _state.value.copy(
-                            status = LyricsStatus.NOT_FOUND,
+                            status = if (outcome.hadDefinitiveResponse) {
+                                LyricsStatus.NOT_FOUND
+                            } else {
+                                LyricsStatus.ERROR
+                            },
                             source = ""
                         )
                         clearLoadingTimeout()
+                        if (outcome.hadUnavailableResponse) {
+                            scheduleProviderRetry(track)
+                        }
                     }
                 }
 
@@ -474,6 +490,7 @@ class MediaTracker private constructor(context: Context) {
                             source = ""
                         )
                         clearLoadingTimeout()
+                        scheduleProviderRetry(track)
                     }
                 }
             }
@@ -483,6 +500,22 @@ class MediaTracker private constructor(context: Context) {
     private fun scheduleLoadingTimeout() {
         handler.removeCallbacks(loadingTimeoutRunnable)
         handler.postDelayed(loadingTimeoutRunnable, LYRICS_LOADING_TIMEOUT_MS)
+    }
+
+    private fun scheduleProviderRetry(track: TrackInfo) {
+        if (providerRetryAttempt >= PROVIDER_AUTO_RETRY_DELAYS_MS.size) return
+        val delayMs = PROVIDER_AUTO_RETRY_DELAYS_MS[providerRetryAttempt++]
+        providerRetryJob?.cancel()
+        providerRetryJob = scope.launch {
+            delay(delayMs)
+            if (!sameTrack(_state.value.track, track)) return@launch
+            _state.value = _state.value.copy(
+                status = LyricsStatus.LOADING,
+                source = ""
+            )
+            scheduleLoadingTimeout()
+            fetchLyrics(track)
+        }
     }
 
     private fun clearLoadingTimeout() {
@@ -521,7 +554,7 @@ class MediaTracker private constructor(context: Context) {
                     }
 
                     val nextTrack = TrackInfo(title, artist, "", 0)
-                    val result = fetchBestLyricsWithRetry(nextTrack)
+                    val result = fetchBestLyricsWithRetry(nextTrack).result
                     if (result != null) {
                         lyricsCache.put(title, artist, result.lines, result.status, result.source)
                     }
@@ -539,41 +572,80 @@ class MediaTracker private constructor(context: Context) {
         val source: String
     )
 
-    private fun fetchBestLyrics(track: TrackInfo): FetchResult? {
+    private data class ProviderFetch(
+        val result: FetchResult?,
+        val hadDefinitiveResponse: Boolean,
+        val hadUnavailableResponse: Boolean
+    )
+
+    private data class FetchOutcome(
+        val result: FetchResult?,
+        val hadDefinitiveResponse: Boolean,
+        val hadUnavailableResponse: Boolean
+    )
+
+    private fun fetchBestLyrics(track: TrackInfo): FetchOutcome {
         val syncLrc = fetchFromSyncLrc(track)
-        if (syncLrc?.status == LyricsStatus.FOUND) return syncLrc
+        if (syncLrc.result != null) {
+            return FetchOutcome(
+                syncLrc.result,
+                syncLrc.hadDefinitiveResponse,
+                syncLrc.hadUnavailableResponse
+            )
+        }
 
         val lrcLib = fetchFromLrcLib(track)
-        if (lrcLib?.status == LyricsStatus.FOUND) return lrcLib
-        return null
+        return FetchOutcome(
+            lrcLib.result,
+            syncLrc.hadDefinitiveResponse || lrcLib.hadDefinitiveResponse,
+            syncLrc.hadUnavailableResponse || lrcLib.hadUnavailableResponse
+        )
     }
 
-    private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchResult? {
+    private suspend fun fetchBestLyricsWithRetry(track: TrackInfo): FetchOutcome {
+        var hadDefinitiveResponse = false
+        var hadUnavailableResponse = false
         repeat(LYRICS_FETCH_ATTEMPTS) { attempt ->
             // Provider fallbacks contain several blocking HTTP calls. Interrupt
             // the worker if an attempt exceeds its deadline so LOADING cannot
             // remain on screen for several minutes when a provider is unhealthy.
-            val result = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
+            val outcome = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
                 runInterruptible(Dispatchers.IO) {
                     fetchBestLyrics(track)
                 }
             }
-            if (result != null) return result
+            if (outcome == null) {
+                hadUnavailableResponse = true
+            } else {
+                hadDefinitiveResponse = hadDefinitiveResponse || outcome.hadDefinitiveResponse
+                hadUnavailableResponse = hadUnavailableResponse || outcome.hadUnavailableResponse
+                if (outcome.result != null) {
+                    return outcome.copy(
+                        hadDefinitiveResponse = hadDefinitiveResponse,
+                        hadUnavailableResponse = hadUnavailableResponse
+                    )
+                }
+            }
             if (attempt < LYRICS_FETCH_ATTEMPTS - 1) {
                 delay(LYRICS_RETRY_DELAYS_MS[attempt])
             }
         }
-        return null
+        return FetchOutcome(null, hadDefinitiveResponse, hadUnavailableResponse)
     }
 
-    private fun fetchFromSyncLrc(track: TrackInfo): FetchResult? {
-        val result = try {
+    private fun fetchFromSyncLrc(track: TrackInfo): ProviderFetch {
+        val lookup = try {
             SyncLrcClient.getLyrics(track.title, track.artist)
         } catch (_: Exception) {
-            null
-        } ?: return null
+            return ProviderFetch(null, false, true)
+        }
+        val result = lookup.value ?: return ProviderFetch(
+            null,
+            lookup.hadDefinitiveResponse,
+            lookup.hadUnavailableResponse
+        )
 
-        return when (result.type) {
+        val parsed = when (result.type) {
             SyncLrcClient.LyricsType.KARAOKE -> {
                 val lines = LrcParser.parseKaraoke(result.lyrics)
                 val hasRealText = lines.any { it.text != "♪" && it.text.isNotBlank() }
@@ -588,12 +660,17 @@ class MediaTracker private constructor(context: Context) {
             }
             SyncLrcClient.LyricsType.PLAIN -> null
         }
+        return ProviderFetch(
+            parsed,
+            lookup.hadDefinitiveResponse,
+            lookup.hadUnavailableResponse
+        )
     }
 
-    private fun fetchFromLrcLib(track: TrackInfo): FetchResult? {
+    private fun fetchFromLrcLib(track: TrackInfo): ProviderFetch {
         val durationSec = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else 0
 
-        val result = try {
+        val lookup = try {
             LrcLibClient.getLyrics(
                 trackName = track.title,
                 artistName = track.artist,
@@ -601,8 +678,13 @@ class MediaTracker private constructor(context: Context) {
                 durationSec = durationSec
             )
         } catch (_: Exception) {
-            null
-        } ?: return null
+            return ProviderFetch(null, false, true)
+        }
+        val result = lookup.value ?: return ProviderFetch(
+            null,
+            lookup.hadDefinitiveResponse,
+            lookup.hadUnavailableResponse
+        )
 
         if (result.syncedLyrics != null) {
             val lines = LrcParser.parse(result.syncedLyrics)
@@ -613,11 +695,19 @@ class MediaTracker private constructor(context: Context) {
                 } else {
                     "LRCLIB · Synced"
                 }
-                return FetchResult(lines, LyricsStatus.FOUND, source)
+                return ProviderFetch(
+                    FetchResult(lines, LyricsStatus.FOUND, source),
+                    lookup.hadDefinitiveResponse,
+                    lookup.hadUnavailableResponse
+                )
             }
         }
 
-        return null
+        return ProviderFetch(
+            null,
+            lookup.hadDefinitiveResponse,
+            lookup.hadUnavailableResponse
+        )
     }
 
     private fun translateIfNeeded(lines: List<LyricLine>, track: TrackInfo) {
@@ -641,8 +731,9 @@ class MediaTracker private constructor(context: Context) {
     companion object {
         private const val LYRICS_FETCH_ATTEMPTS = 2
         private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 12_000L
-        private const val LYRICS_LOADING_TIMEOUT_MS = 25_000L
+        private const val LYRICS_LOADING_TIMEOUT_MS = 30_000L
         private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L)
+        private val PROVIDER_AUTO_RETRY_DELAYS_MS = longArrayOf(7_500L, 15_000L, 30_000L)
 
         @Volatile
         private var instance: MediaTracker? = null

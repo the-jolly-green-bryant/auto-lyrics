@@ -58,8 +58,8 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
     companion object {
         private const val ROOT_ID = "root"
-        private const val WINDOW_SIZE = 5
-        private const val PLAIN_WINDOW_SIZE = 5
+        private const val WINDOW_SIZE = 6
+        private const val PLAIN_WINDOW_SIZE = 6
         private const val PAD_WIDTH = 60
         private const val NOTIFY_THROTTLE_MS = 500L
         private const val BROWSE_KARAOKE_WINDOW_MS = 600L
@@ -148,23 +148,18 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 items.add(buildTextItem("no_media", "Play a song to see lyrics"))
             }
             LyricsStatus.LOADING -> {
-                addTrackHeader(state, items)
                 items.add(buildTextItem("loading", "Loading lyrics…"))
             }
             LyricsStatus.NOT_FOUND -> {
-                addTrackHeader(state, items)
                 items.add(buildTextItem("not_found", "No lyrics found for this track"))
             }
             LyricsStatus.ERROR -> {
-                addTrackHeader(state, items)
                 items.add(buildTextItem("error", "Lyrics services unavailable — try again"))
             }
             LyricsStatus.FOUND -> {
-                addTrackHeader(state, items)
                 buildWindowedLyrics(state, items)
             }
             LyricsStatus.PLAIN_ONLY -> {
-                addTrackHeader(state, items)
                 if (state.lines.isEmpty()) {
                     items.add(buildTextItem("empty", "♪"))
                 } else {
@@ -178,12 +173,10 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                             .coerceIn(0, state.lines.size - 1)
                     } else { 0 }
 
-                    val half = PLAIN_WINDOW_SIZE / 2
-                    val winStart = maxOf(0, estimatedIdx - half)
+                    val winStart = estimatedIdx
                     val winEnd = minOf(state.lines.size, winStart + PLAIN_WINDOW_SIZE)
-                    val adjStart = maxOf(0, winEnd - PLAIN_WINDOW_SIZE)
 
-                    for (i in adjStart until winEnd) {
+                    for (i in winStart until winEnd) {
                         val text = state.lines[i].text.ifBlank { "♪" }
                         val trans = state.translatedLines?.getOrNull(i)?.takeIf { it.isNotBlank() }
                         items.add(buildTextItem("line_$i", "    $text", pad = true, subtitle = trans))
@@ -193,15 +186,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
 
         result.sendResult(items)
-    }
-
-    private fun addTrackHeader(
-        state: LyricsState,
-        items: MutableList<MediaBrowserCompat.MediaItem>
-    ) {
-        val track = state.track ?: return
-        val title = if (track.artist.isBlank()) track.title else "${track.title} — ${track.artist}"
-        items.add(buildTextItem("header", title))
     }
 
     private fun buildWindowedLyrics(
@@ -216,13 +200,10 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         val posMs = getAaPositionMs()
         val aaCurrentIdx = findLineIndex(lines, posMs).coerceAtLeast(0)
-        val half = WINDOW_SIZE / 2
-
-        val windowStart = maxOf(0, aaCurrentIdx - half)
+        val windowStart = aaCurrentIdx
         val windowEnd = minOf(lines.size, windowStart + WINDOW_SIZE)
-        val adjustedStart = maxOf(0, windowEnd - WINDOW_SIZE)
 
-        for (i in adjustedStart until windowEnd) {
+        for (i in windowStart until windowEnd) {
             val line = lines[i]
             val isCurrent = i == aaCurrentIdx
             val prefix = if (isCurrent) "▶  " else "    "
@@ -363,12 +344,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 metaBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.durationMs)
             }
 
-            val displayTitle = if (track.artist.isNotBlank()) {
-                "${track.title} — ${track.artist}"
-            } else {
-                track.title
-            }
-            metaBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, displayTitle)
         }
 
         val art = state.albumArt ?: lastAlbumArt
@@ -479,11 +454,9 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
 
         val winSize = if (isPlain) PLAIN_WINDOW_SIZE else WINDOW_SIZE
-        val half = winSize / 2
-        val windowStart = maxOf(0, currentIdx - half)
+        val windowStart = currentIdx
         val windowEnd = minOf(lines.size, windowStart + winSize)
-        val adjustedStart = maxOf(0, windowEnd - winSize)
-        return WindowInfo(adjustedStart, windowEnd, currentIdx)
+        return WindowInfo(windowStart, windowEnd, currentIdx)
     }
 
     private fun forceRefresh() {

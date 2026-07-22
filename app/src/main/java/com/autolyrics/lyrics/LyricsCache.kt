@@ -21,7 +21,8 @@ class LyricsCache(context: Context) {
         val lines: List<CachedLine>,
         val status: String,
         val source: String,
-        val timestamp: Long
+        val timestamp: Long,
+        val schemaVersion: Int = 0
     )
 
     data class CachedLine(
@@ -53,7 +54,8 @@ class LyricsCache(context: Context) {
                 return null
             }
             if (status == LyricsStatus.NOT_FOUND &&
-                System.currentTimeMillis() - cached.timestamp >= NEGATIVE_CACHE_MS
+                (cached.schemaVersion < CACHE_SCHEMA_VERSION ||
+                    System.currentTimeMillis() - cached.timestamp >= NEGATIVE_CACHE_MS)
             ) {
                 file.delete()
                 return null
@@ -91,7 +93,8 @@ class LyricsCache(context: Context) {
                 },
                 status = status.name,
                 source = source,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                schemaVersion = CACHE_SCHEMA_VERSION
             )
             val json = gson.toJson(cached)
             cacheFile(title, artist, spotifyUri).writeText(json)
@@ -123,5 +126,6 @@ class LyricsCache(context: Context) {
 
     companion object {
         private const val NEGATIVE_CACHE_MS = 24L * 60 * 60 * 1000
+        private const val CACHE_SCHEMA_VERSION = 2
     }
 }

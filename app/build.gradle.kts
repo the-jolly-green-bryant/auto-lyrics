@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val baseVersionName = "1.9.6"
+val buildNumber = providers.gradleProperty("build.number").orNull?.toIntOrNull()
+
 android {
     namespace = "com.autolyrics"
     compileSdk = 34
@@ -11,8 +14,8 @@ android {
         applicationId = "com.autolyrics"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30
-        versionName = "1.9.6"
+        versionCode = buildNumber?.let { 1_906_000 + it } ?: 30
+        versionName = buildNumber?.let { "$baseVersionName.$it" } ?: baseVersionName
     }
 
     signingConfigs {

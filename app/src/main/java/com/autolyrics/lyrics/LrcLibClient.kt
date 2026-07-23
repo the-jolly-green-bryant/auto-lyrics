@@ -70,9 +70,14 @@ object LrcLibClient {
 
         // Priority 2: search for synced lyrics (duration-guarded)
         val searchResults = record(searchAll(trackName, artistName)).orEmpty()
-        val syncedResult = searchResults.firstOrNull {
-            it.syncedLyrics != null && withinDuration(it, durationSec)
-        }
+        val syncedResult = searchResults
+            .asSequence()
+            .filter {
+                it.syncedLyrics != null &&
+                    titlesEquivalent(it.trackName.orEmpty(), trackName) &&
+                    withinDuration(it, durationSec)
+            }
+            .minByOrNull { kotlin.math.abs((it.duration ?: durationSec) - durationSec) }
         if (syncedResult != null) {
             return LookupResult(syncedResult, hadDefinitiveResponse, hadUnavailableResponse)
         }
@@ -103,7 +108,7 @@ object LrcLibClient {
 
     private fun withinDuration(result: LrcLibResponse, durationSec: Int): Boolean {
         if (durationSec <= 0 || result.duration == null) return true
-        return kotlin.math.abs(result.duration - durationSec) <= 15
+        return kotlin.math.abs(result.duration - durationSec) <= MAX_DURATION_DIFFERENCE_SECONDS
     }
 
     private fun titlesEquivalent(left: String, right: String): Boolean {
@@ -183,4 +188,6 @@ object LrcLibClient {
             RequestResult(null, definitive = false, unavailable = true)
         }
     }
+
+    private const val MAX_DURATION_DIFFERENCE_SECONDS = 60
 }

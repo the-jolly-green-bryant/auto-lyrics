@@ -584,18 +584,28 @@ class MediaTracker private constructor(context: Context) {
         val hadUnavailableResponse: Boolean
     )
 
-    private fun fetchBestLyrics(track: TrackInfo): FetchOutcome {
-        val syncLrc = fetchFromSyncLrc(track)
+    private suspend fun fetchBestLyrics(track: TrackInfo): FetchOutcome = coroutineScope {
+        // Providers run independently so a slow or unavailable service cannot
+        // consume the entire attempt before the healthy fallback is queried.
+        val syncLrcDeferred = async(Dispatchers.IO) {
+            runInterruptible { fetchFromSyncLrc(track) }
+        }
+        val lrcLibDeferred = async(Dispatchers.IO) {
+            runInterruptible { fetchFromLrcLib(track) }
+        }
+
+        val syncLrc = syncLrcDeferred.await()
         if (syncLrc.result != null) {
-            return FetchOutcome(
+            lrcLibDeferred.cancel()
+            return@coroutineScope FetchOutcome(
                 syncLrc.result,
                 syncLrc.hadDefinitiveResponse,
                 syncLrc.hadUnavailableResponse
             )
         }
 
-        val lrcLib = fetchFromLrcLib(track)
-        return FetchOutcome(
+        val lrcLib = lrcLibDeferred.await()
+        FetchOutcome(
             lrcLib.result,
             syncLrc.hadDefinitiveResponse || lrcLib.hadDefinitiveResponse,
             syncLrc.hadUnavailableResponse || lrcLib.hadUnavailableResponse
@@ -610,9 +620,7 @@ class MediaTracker private constructor(context: Context) {
             // the worker if an attempt exceeds its deadline so LOADING cannot
             // remain on screen for several minutes when a provider is unhealthy.
             val outcome = withTimeoutOrNull(LYRICS_FETCH_ATTEMPT_TIMEOUT_MS) {
-                runInterruptible(Dispatchers.IO) {
-                    fetchBestLyrics(track)
-                }
+                fetchBestLyrics(track)
             }
             if (outcome == null) {
                 hadUnavailableResponse = true
@@ -730,7 +738,7 @@ class MediaTracker private constructor(context: Context) {
 
     companion object {
         private const val LYRICS_FETCH_ATTEMPTS = 2
-        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 12_000L
+        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 20_000L
         private const val LYRICS_LOADING_TIMEOUT_MS = 30_000L
         private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L)
         private val PROVIDER_AUTO_RETRY_DELAYS_MS = longArrayOf(7_500L, 15_000L, 30_000L)

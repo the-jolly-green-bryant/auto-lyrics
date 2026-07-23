@@ -734,10 +734,10 @@ class MediaTracker private constructor(context: Context) {
 
     companion object {
         private const val LYRICS_FETCH_ATTEMPTS = 1
-        private const val PRIMARY_PROVIDER_TIMEOUT_MS = 12_000L
+        private const val PRIMARY_PROVIDER_TIMEOUT_MS = 30_000L
         private const val BACKUP_PROVIDER_TIMEOUT_MS = 10_000L
-        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 24_000L
-        private const val LYRICS_LOADING_TIMEOUT_MS = 30_000L
+        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 42_000L
+        private const val LYRICS_LOADING_TIMEOUT_MS = 45_000L
         private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L)
         private val PROVIDER_AUTO_RETRY_DELAYS_MS = longArrayOf(7_500L, 15_000L, 30_000L)
 

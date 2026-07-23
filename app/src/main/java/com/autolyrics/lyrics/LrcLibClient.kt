@@ -1,5 +1,6 @@
 package com.autolyrics.lyrics
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -11,14 +12,16 @@ import java.util.concurrent.TimeUnit
 object LrcLibClient {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
     private const val BASE_URL = "https://lrclib.net/api"
-    private const val USER_AGENT = "AutoLyrics v1.0 (https://github.com/user/auto-lyrics)"
+    private const val USER_AGENT =
+        "com.autolyrics/1.9.6 (https://github.com/the-jolly-green-bryant/auto-lyrics)"
+    private const val TAG = "LrcLibClient"
 
     data class LrcLibResponse(
         @SerializedName("id") val id: Int?,
@@ -148,10 +151,12 @@ object LrcLibClient {
                 } else if (response.code == 404) {
                     RequestResult(null, definitive = true, unavailable = false)
                 } else {
+                    Log.w(TAG, "Exact lookup returned HTTP ${response.code}")
                     RequestResult(null, definitive = false, unavailable = true)
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Exact lookup failed", e)
             RequestResult(null, definitive = false, unavailable = true)
         }
     }
@@ -181,10 +186,12 @@ object LrcLibClient {
                 } else if (response.code == 404) {
                     RequestResult(emptyList(), definitive = true, unavailable = false)
                 } else {
+                    Log.w(TAG, "Search lookup returned HTTP ${response.code}")
                     RequestResult(null, definitive = false, unavailable = true)
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Search lookup failed", e)
             RequestResult(null, definitive = false, unavailable = true)
         }
     }

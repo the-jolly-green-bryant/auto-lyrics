@@ -126,6 +126,6 @@ class LyricsCache(context: Context) {
 
     companion object {
         private const val NEGATIVE_CACHE_MS = 24L * 60 * 60 * 1000
-        private const val CACHE_SCHEMA_VERSION = 3
+        private const val CACHE_SCHEMA_VERSION = 4
     }
 }

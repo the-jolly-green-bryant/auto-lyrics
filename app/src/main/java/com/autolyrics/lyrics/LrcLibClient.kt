@@ -117,8 +117,18 @@ object LrcLibClient {
     private fun titlesEquivalent(left: String, right: String): Boolean {
         fun normalize(value: String): String = value
             .lowercase()
-            .replace(Regex("""\s*[\(\[].*?\b(remaster(ed)?|live|version|edit|mix)\b.*?[\)\]]"""), "")
-            .replace(Regex("""\s+-\s+(remaster(ed)?|live|.*?version|.*?edit|.*?mix).*$"""), "")
+            .replace(
+                Regex(
+                    """\s*[\(\[].*?\b(remaster(ed)?|re-?recorded|new recording|live|version|edit|mix)\b.*?[\)\]]"""
+                ),
+                ""
+            )
+            .replace(
+                Regex(
+                    """\s+-\s+(remaster(ed)?|re-?recorded|new recording|live|.*?version|.*?edit|.*?mix).*$"""
+                ),
+                ""
+            )
             .replace(Regex("""[^a-z0-9]+"""), "")
         return normalize(left) == normalize(right)
     }

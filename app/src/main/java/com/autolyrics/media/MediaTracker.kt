@@ -584,29 +584,25 @@ class MediaTracker private constructor(context: Context) {
         val hadUnavailableResponse: Boolean
     )
 
-    private suspend fun fetchBestLyrics(track: TrackInfo): FetchOutcome = coroutineScope {
-        // Providers run independently so a slow or unavailable service cannot
-        // consume the entire attempt before the healthy fallback is queried.
-        val syncLrcDeferred = async(Dispatchers.IO) {
-            runInterruptible { fetchFromSyncLrc(track) }
-        }
-        val lrcLibDeferred = async(Dispatchers.IO) {
-            runInterruptible { fetchFromLrcLib(track) }
-        }
-
-        val syncLrc = syncLrcDeferred.await()
-        if (syncLrc.result != null) {
-            lrcLibDeferred.cancel()
-            return@coroutineScope FetchOutcome(
-                syncLrc.result,
-                syncLrc.hadDefinitiveResponse,
-                syncLrc.hadUnavailableResponse
+    private suspend fun fetchBestLyrics(track: TrackInfo): FetchOutcome {
+        // LRCLIB has the broadest synced catalog, so avoid touching the backup
+        // unless LRCLIB has no match or fails to answer within its deadline.
+        val lrcLib = withTimeoutOrNull(PRIMARY_PROVIDER_TIMEOUT_MS) {
+            runInterruptible(Dispatchers.IO) { fetchFromLrcLib(track) }
+        } ?: ProviderFetch(null, false, true)
+        if (lrcLib.result != null) {
+            return FetchOutcome(
+                lrcLib.result,
+                lrcLib.hadDefinitiveResponse,
+                lrcLib.hadUnavailableResponse
             )
         }
 
-        val lrcLib = lrcLibDeferred.await()
-        FetchOutcome(
-            lrcLib.result,
+        val syncLrc = withTimeoutOrNull(BACKUP_PROVIDER_TIMEOUT_MS) {
+            runInterruptible(Dispatchers.IO) { fetchFromSyncLrc(track) }
+        } ?: ProviderFetch(null, false, true)
+        return FetchOutcome(
+            syncLrc.result,
             syncLrc.hadDefinitiveResponse || lrcLib.hadDefinitiveResponse,
             syncLrc.hadUnavailableResponse || lrcLib.hadUnavailableResponse
         )
@@ -737,8 +733,10 @@ class MediaTracker private constructor(context: Context) {
     }
 
     companion object {
-        private const val LYRICS_FETCH_ATTEMPTS = 2
-        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 20_000L
+        private const val LYRICS_FETCH_ATTEMPTS = 1
+        private const val PRIMARY_PROVIDER_TIMEOUT_MS = 12_000L
+        private const val BACKUP_PROVIDER_TIMEOUT_MS = 10_000L
+        private const val LYRICS_FETCH_ATTEMPT_TIMEOUT_MS = 24_000L
         private const val LYRICS_LOADING_TIMEOUT_MS = 30_000L
         private val LYRICS_RETRY_DELAYS_MS = longArrayOf(750L)
         private val PROVIDER_AUTO_RETRY_DELAYS_MS = longArrayOf(7_500L, 15_000L, 30_000L)

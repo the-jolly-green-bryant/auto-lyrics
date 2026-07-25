@@ -1,99 +1,120 @@
 # Auto Lyrics
 
-An Android Auto app that displays synced lyrics for the currently playing song, powered by [LRCLIB](https://lrclib.net/).
+<p align="center">
+  Synchronized lyrics for Android and Android Auto—matched to whatever is playing.
+</p>
 
-## Features
+<p align="center">
+  <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-1.9-7F52FF?logo=kotlin&logoColor=white">
+  <a href="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml"><img alt="Build" src="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
 
-- **Synced lyrics on Android Auto** — shows the current lyric line with surrounding context, updated in real-time
-- **Works with any music player** — Spotify, YouTube Music, Apple Music, Poweramp, etc.
-- **Phone companion view** — see lyrics on your phone screen too
-- **Automatic song detection** — picks up whatever is playing via media session APIs
-- **Multi-strategy lyrics lookup** — tries exact match first, falls back to keyword search
+Auto Lyrics follows the active Android media session, finds the best available
+lyrics, and keeps the current line—or word—aligned with playback. It works as a
+phone companion and as a sideloaded Android Auto media app.
 
-## Architecture
+## Highlights
 
+- **Player-agnostic playback tracking** through Android media sessions
+- **Karaoke, synchronized, and plain lyrics** with graceful fallback behavior
+- **Two lyrics providers**: SyncLRC first, then LRCLIB
+- **Android Auto integration** with browse-tree lyrics and a fast-updating
+  now-playing subtitle
+- **Performance Mode** for an immersive, large-format phone display
+- **Practical sync controls**, including manual offsets and speech-assisted alignment
+- **Transport proxying** for play, pause, and seek controls
+- **Adaptive presentation** using colors extracted from album art
+
+## How it works
+
+```text
+Active media session
+        │
+        ▼
+   MediaTracker ──────► SyncLRC ──► LRCLIB fallback
+        │                    │
+        │               LRC / ELRC parser
+        │                    │
+        ├──────────────► Phone UI
+        └──────────────► Android Auto MediaBrowserService
 ```
-MediaListenerService (NotificationListenerService)
-    │
-    ▼
-MediaTracker (singleton, StateFlow)
-    │   ├── detects song changes → LrcLibClient → LrcParser
-    │   └── tracks playback position → updates current lyric index
-    │
-    ├─────────────────┐
-    ▼                 ▼
-LyricsScreen      MainActivity
-(Android Auto)    (Phone UI)
-```
 
-## Setup
+`MediaListenerService` observes active sessions and feeds normalized metadata and
+playback position into a singleton `MediaTracker`. Lyrics are cached, parsed into
+timestamped lines and words, and exposed as a `StateFlow` to the phone and car
+surfaces.
 
-### Prerequisites
+## Getting started
 
-- Android Studio Hedgehog (2023.1.1) or newer
+### Requirements
+
+- Android Studio Hedgehog or newer
 - Android SDK 34
 - JDK 17
-- A physical Android device (Android 8.0+)
+- A physical device running Android 8.0 (API 26) or newer
 
-### Build
+### Build and install
 
-1. Open the project in Android Studio
-2. Sync Gradle
-3. Build and install on your device:
-   ```
-   ./gradlew installDebug
-   ```
+```bash
+git clone https://github.com/the-jolly-green-bryant/auto-lyrics.git
+cd auto-lyrics
+./gradlew installDebug
+```
 
-### First-Time Setup
+Then:
 
-1. **Open Auto Lyrics** on your phone
-2. **Grant notification access** — tap the button and enable "Auto Lyrics" in the system settings
-3. **Play a song** in any music app
-4. Lyrics will appear both on the phone and on Android Auto
+1. Open Auto Lyrics on the phone.
+2. Grant notification access when prompted.
+3. Start playback in a media app.
+4. Open Auto Lyrics on the phone or in Android Auto.
 
-### Testing with Android Auto Desktop Head Unit (DHU)
+No lyrics-provider API key is required.
 
-1. Install **Android Auto Desktop Head Unit emulator** from SDK Manager → SDK Tools
-2. Enable **Developer mode** in the Android Auto app on your phone (tap version 10 times)
-3. In Android Auto developer settings, enable **Unknown sources**
-4. Start the DHU:
-   ```
-   cd $ANDROID_SDK/extras/google/auto/
-   ./desktop-head-unit
-   ```
-5. Connect your phone via USB with the Android Auto companion app running
-6. Auto Lyrics will appear in the app launcher on the DHU
+## Android Auto setup
 
-### Using on a real car (sideloaded APK)
+Sideloaded car apps require Android Auto developer mode:
 
-Since this app is installed outside the Play Store, Android Auto requires **developer mode** to show it:
+1. Open Android Auto settings on the phone.
+2. Tap **Version** ten times to enable developer mode.
+3. Open **Developer settings** from the overflow menu.
+4. Enable **Unknown sources**.
+5. Reconnect the phone to the car or Desktop Head Unit.
 
-1. Open the **Android Auto** app on your phone
-2. Go to **Settings** → scroll to the bottom → tap **Version** 10 times rapidly
-3. You'll see a toast saying "Developer mode enabled"
-4. Tap the **⋮** (three-dot) menu at the top right → **Developer settings**
-5. Enable **"Unknown sources"** (allows sideloaded apps on Android Auto)
-6. Restart Android Auto or disconnect/reconnect to your car
-7. **Auto Lyrics** should now appear in the Android Auto app launcher
-8. Play music — lyrics appear automatically
+For emulator testing, install the Android Auto Desktop Head Unit from Android
+Studio's SDK Tools and follow the
+[official DHU setup](https://developer.android.com/training/cars/testing/dhu).
 
-## How It Works
+## Project structure
 
-1. **Media detection**: A `NotificationListenerService` grants access to `MediaSessionManager`, which provides the currently active media controllers
-2. **Song identification**: When the song changes, metadata (title, artist, album, duration) is extracted from the `MediaController`
-3. **Lyrics fetch**: The app queries [LRCLIB](https://lrclib.net/api) — first an exact match (`/api/get`), then a keyword search (`/api/search`) as fallback
-4. **LRC parsing**: Synced lyrics in `[mm:ss.xx] text` format are parsed into timestamped lines
-5. **Position tracking**: Playback position is calculated from the media session's last reported position + elapsed time, checked every 150ms
-6. **Display**: On Android Auto, a `PaneTemplate` shows 4 lyric lines centered on the current one, marked with ▶. The screen refreshes only when the active line changes.
+```text
+app/src/main/java/com/autolyrics/
+├── auto/       Android Auto browser service and boot receiver
+├── lyrics/     provider clients, parsing, normalization, and caching
+├── media/      media-session discovery and playback tracking
+├── model/      shared state and domain models
+└── util/       audio sync and album-color extraction
+```
 
-## Limitations
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the detailed architecture, file map,
+preference keys, release behavior, and implementation notes.
 
-- **Android Auto app categories**: The app registers as an IOT-category Car App. For Google Play distribution, it would need to pass Android Auto app review.
-- **Lyrics availability**: Not all songs have synced lyrics on LRCLIB. The app will show "No synced lyrics available" for missing tracks.
-- **Player compatibility**: Most major music players expose media sessions correctly. Some niche players may not provide full metadata.
-- **Streaming quality tags**: Some music apps (YouTube Music, Tidal, etc.) inject quality info like "Lossless" or "Hi-Res" into metadata fields. The app strips these automatically, but unusual formats may slip through.
-- **Sideloaded apps on Android Auto**: Developer mode must be enabled in Android Auto settings to see sideloaded apps. See setup instructions above.
+## Releases
+
+GitHub Actions builds an APK for pull requests and pushes to `main`. Successful
+`main` builds also publish a prerelease containing the versioned APK and its
+SHA-256 checksum. Download the latest artifact from
+[Releases](https://github.com/the-jolly-green-bryant/auto-lyrics/releases).
+
+## Known constraints
+
+- Lyrics depend on provider coverage and may be synchronized, plain text, or absent.
+- Player compatibility depends on the quality of metadata exposed through its media
+  session.
+- Google Play distribution would require review under Android Auto's supported app
+  categories; the current workflow is intended for sideloading.
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE).

@@ -6,7 +6,8 @@
 
 <p align="center">
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white">
-  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-1.9-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Target SDK" src="https://img.shields.io/badge/target_API-36-3DDC84">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white">
   <a href="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml"><img alt="Build" src="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
@@ -19,7 +20,7 @@ phone companion and as a sideloaded Android Auto media app.
 
 - **Player-agnostic playback tracking** through Android media sessions
 - **Karaoke, synchronized, and plain lyrics** with graceful fallback behavior
-- **Two lyrics providers**: SyncLRC first, then LRCLIB
+- **Resilient provider fallback**: SyncLRC first, then LRCLIB
 - **Android Auto integration** with browse-tree lyrics and a fast-updating
   now-playing subtitle
 - **Performance Mode** for an immersive, large-format phone display
@@ -50,8 +51,8 @@ surfaces.
 
 ### Requirements
 
-- Android Studio Hedgehog or newer
-- Android SDK 34
+- A current stable Android Studio release
+- Android SDK 36
 - JDK 17
 - A physical device running Android 8.0 (API 26) or newer
 
@@ -63,28 +64,77 @@ cd auto-lyrics
 ./gradlew installDebug
 ```
 
-Then:
+Then complete the one-time phone setup:
 
 1. Open Auto Lyrics on the phone.
-2. Grant notification access when prompted.
-3. Start playback in a media app.
-4. Open Auto Lyrics on the phone or in Android Auto.
+2. Select **Grant notification access** and enable Auto Lyrics. This is how the
+   app discovers the active media session; it does not read message content.
+3. Start playback in Spotify or another Android media player.
+4. Return to Auto Lyrics and confirm that the track title and lyrics appear.
 
 No lyrics-provider API key is required.
 
-## Android Auto setup
+## Run the debug app in Android Auto
 
-Sideloaded car apps require Android Auto developer mode:
+Android Auto normally hides media apps installed outside a trusted store. For a
+local debug build, enable Android Auto's separate developer mode and allow unknown
+sources:
 
-1. Open Android Auto settings on the phone.
-2. Tap **Version** ten times to enable developer mode.
-3. Open **Developer settings** from the overflow menu.
-4. Enable **Unknown sources**.
-5. Reconnect the phone to the car or Desktop Head Unit.
+1. Install the debug build with `./gradlew installDebug`.
+2. On the phone, open **Settings → Connected devices → Connection preferences →
+   Android Auto**. The exact path varies by device; searching Settings for
+   “Android Auto” is usually fastest.
+3. Scroll to **About**, tap **Version and permission info** ten times, and accept
+   **Allow development settings?**
+4. Open the overflow menu, choose **Developer settings**, then enable
+   **Unknown sources**.
+5. Reconnect Android Auto. Open the launcher/customize screen and enable **Auto
+   Lyrics** if it is not already visible.
+6. Start music on the phone before opening Auto Lyrics in the car. Auto Lyrics is
+   a companion media browser—it displays and controls the active player's session
+   rather than playing its own catalog.
 
-For emulator testing, install the Android Auto Desktop Head Unit from Android
-Studio's SDK Tools and follow the
-[official DHU setup](https://developer.android.com/training/cars/testing/dhu).
+Do not troubleshoot this with Android's ordinary **Developer options** alone;
+Android Auto developer mode is a separate setting.
+
+### Test without a car using Desktop Head Unit
+
+Install **Android Auto Desktop Head Unit Emulator** from Android Studio's **SDK
+Manager → SDK Tools**. Then choose one connection:
+
+**USB accessory mode (DHU 2.x, recommended)**
+
+```bash
+cd "$ANDROID_HOME/extras/google/auto"
+chmod +x ./desktop-head-unit   # macOS/Linux, once
+./desktop-head-unit --usb
+```
+
+**ADB tunnel**
+
+1. In Android Auto's developer settings, select **Start head unit server**.
+2. Connect and unlock the phone, then run:
+
+```bash
+adb forward tcp:5277 tcp:5277
+"$ANDROID_HOME/extras/google/auto/desktop-head-unit"
+```
+
+If the app is absent, verify all four prerequisites: the debug APK is installed,
+notification access is granted, **Unknown sources** is enabled inside Android
+Auto, and Android Auto was reconnected after installation. See Google's
+[Desktop Head Unit guide](https://developer.android.com/training/cars/testing/dhu)
+for platform-specific USB and emulator troubleshooting.
+
+## Quality checks
+
+```bash
+./gradlew testDebugUnitTest lintDebug assembleDebug
+```
+
+The unit suite covers timestamp parsing, karaoke word timing, and noisy media
+metadata cleanup. Android Lint checks the manifest, resources, SDK behavior, and
+common correctness issues.
 
 ## Project structure
 
@@ -102,10 +152,10 @@ preference keys, release behavior, and implementation notes.
 
 ## Releases
 
-GitHub Actions builds an APK for pull requests and pushes to `main`. Successful
-`main` builds also publish a prerelease containing the versioned APK and its
-SHA-256 checksum. Download the latest artifact from
-[Releases](https://github.com/the-jolly-green-bryant/auto-lyrics/releases).
+GitHub Actions runs tests, Android Lint, and a debug build for pull requests and
+pushes to `main`. Version tags such as `v2.0.0` additionally create a signed
+GitHub release containing the versioned APK and its SHA-256 checksum. Development
+artifacts remain attached to their workflow runs for 14 days.
 
 ## Known constraints
 
@@ -114,6 +164,9 @@ SHA-256 checksum. Download the latest artifact from
   session.
 - Google Play distribution would require review under Android Auto's supported app
   categories; the current workflow is intended for sideloading.
+- Android Auto deliberately limits text-heavy experiences while driving. The car
+  surface uses media-browser and now-playing templates rather than a free-form
+  scrolling phone UI.
 
 ## License
 

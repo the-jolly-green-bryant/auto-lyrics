@@ -3,6 +3,7 @@ name: Android CI and Release
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -50,7 +51,7 @@ jobs:
           echo "artifact_name=auto-lyrics-$version" >> "$GITHUB_OUTPUT"
 
       - name: Restore APK signing key
-        if: github.event_name != 'pull_request'
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
@@ -61,23 +62,25 @@ jobs:
           fi
           printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
 
-      - name: Build signed debug APK
-        if: github.event_name != 'pull_request'
+      - name: Run quality gates and build signed APK
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
-          ./gradlew --no-daemon clean assembleDebug \
+          ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug \
             -Pbuild.number="${GITHUB_RUN_NUMBER}" \
             -Psigning.store.file="$RUNNER_TEMP/signing.p12" \
             -Psigning.store.password="$SIGNING_STORE_PASSWORD" \
             -Psigning.key.alias="$SIGNING_KEY_ALIAS" \
             -Psigning.key.password="$SIGNING_KEY_PASSWORD"
 
-      - name: Build pull request APK
-        if: github.event_name == 'pull_request'
-        run: ./gradlew --no-daemon clean assembleDebug -Pbuild.number="${GITHUB_RUN_NUMBER}"
+      - name: Run quality gates and build development APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug \
+            -Pbuild.number="${GITHUB_RUN_NUMBER}"
 
       - name: Prepare release files
         shell: bash
@@ -100,7 +103,7 @@ jobs:
 
   release:
     name: Publish GitHub release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -117,10 +120,10 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: build-${{ github.run_number }}
+          tag_name: ${{ github.ref_name }}
           target_commitish: ${{ github.sha }}
           name: Auto Lyrics ${{ needs.build.outputs.version }} (build ${{ github.run_number }})
           files: dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
-          prerelease: true
+          prerelease: false

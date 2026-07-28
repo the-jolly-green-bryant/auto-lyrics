@@ -82,19 +82,17 @@ AutoLyricsApp (Application)
 |---|---|
 | `app/build.gradle.kts` | Dependencies, SDK versions, signing config, version management. |
 | `AndroidManifest.xml` | Components, permissions, AA metadata. |
-| `.github/workflows/build.yml` | CI: build APK, create GitHub release with versioned filename. |
-| `app/signing.p12` | Shared signing keystore (avoids version conflicts across CI runs). |
+| `.github/workflows/build.yml` | CI: test, lint, build APK, and create tag-driven releases. |
 
 ## CI and Releases
 
-GitHub Actions builds the signed debug APK for every pull request and every push
-to `main`. Successful builds are retained as workflow artifacts for 14 days.
+GitHub Actions runs `testDebugUnitTest`, `lintDebug`, and `assembleDebug` for
+every pull request and every push to `main`. Successful builds are retained as
+workflow artifacts for 14 days.
 
-Every successful push to `main` also publishes a GitHub prerelease containing
-`auto-lyrics-<versionName>.apk` and its SHA-256 checksum. The workflow creates a
-unique `build-<run number>` tag automatically, so contributors do not need to
-create or push release tags manually. Pull requests build the APK but do not
-publish releases.
+Tags matching `v*` restore the release signing material from repository secrets
+and publish `auto-lyrics-<versionName>.apk` with its SHA-256 checksum. Ordinary
+branch pushes never create a public release.
 
 ## Key Constants (`LyricsBrowserService`)
 

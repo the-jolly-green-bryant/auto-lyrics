@@ -9,7 +9,7 @@
   <img alt="Target SDK" src="https://img.shields.io/badge/target_API-36-3DDC84">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white">
   <a href="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml"><img alt="Build" src="https://github.com/the-jolly-green-bryant/auto-lyrics/actions/workflows/build.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-all_rights_reserved-blue"></a>
 </p>
 
 Auto Lyrics follows the active Android media session, finds the best available
@@ -170,4 +170,5 @@ artifacts remain attached to their workflow runs for 14 days.
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Published for transparency and portfolio purposes only. All rights are reserved;
+see [LICENSE](LICENSE).
